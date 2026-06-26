@@ -2,6 +2,17 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 
+const { getAccessToken } = require("./nomba");
+
+app.get("/test-auth", async (req, res) => {
+  try {
+    const token = await getAccessToken();
+    res.json({ success: true, token });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.use(express.json());
 
 app.get("/", (req, res) => {
