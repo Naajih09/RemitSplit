@@ -3,6 +3,8 @@ const axios = require("axios");
 let cachedToken = null;
 let tokenExpiry = null;
 
+const BASE_URL = "https://sandbox.nomba.com";
+
 async function getAccessToken() {
   if (cachedToken && tokenExpiry && Date.now() < tokenExpiry) {
     return cachedToken;
@@ -10,7 +12,7 @@ async function getAccessToken() {
 
   try {
     const response = await axios.post(
-      "https://api.nomba.com/v1/auth/token/issue",
+      `${BASE_URL}/v1/auth/token/issue`,
       {
         grant_type: "client_credentials",
         client_id: process.env.NOMBA_CLIENT_ID,
@@ -25,7 +27,7 @@ async function getAccessToken() {
     );
 
     cachedToken = response.data.data.access_token;
-    tokenExpiry = Date.now() + (30 * 60 - 60) * 1000; // 30 min expiry, minus 1 min buffer
+    tokenExpiry = Date.now() + (30 * 60 - 60) * 1000;
 
     return cachedToken;
   } catch (error) {
@@ -34,4 +36,53 @@ async function getAccessToken() {
   }
 }
 
-module.exports = { getAccessToken };
+async function createVirtualAccount({ accountRef, accountName, expectedAmount, expiryDate }) {
+  const token = await getAccessToken();
+
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/v1/accounts/virtual`,
+      {
+        accountRef,
+        accountName,
+        expectedAmount,
+        expiryDate
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "accountId": process.env.NOMBA_ACCOUNT_ID
+        }
+      }
+    );
+
+    return response.data.data;
+  } catch (error) {
+    console.error("Create virtual account error:", error.response?.data || error.message);
+    throw error;
+  }
+}
+
+async function fetchVirtualAccount(accountRef) {
+  const token = await getAccessToken();
+
+  try {
+    const response = await axios.get(
+      `${BASE_URL}/v1/accounts/virtual/${accountRef}`,
+      {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "accountId": process.env.NOMBA_ACCOUNT_ID
+        }
+      }
+    );
+
+    return response.data.data;
+  } catch (error) {
+    console.error("Fetch virtual account error:", error.response?.data || error.message);
+    throw error;
+  }
+}
+
+module.exports = { getAccessToken, createVirtualAccount };
