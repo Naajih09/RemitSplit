@@ -85,4 +85,89 @@ async function fetchVirtualAccount(accountRef) {
   }
 }
 
-module.exports = { getAccessToken, createVirtualAccount };
+async function fetchBankCodes() {
+  const token = await getAccessToken();
+
+  try {
+    const response = await axios.get(
+      `${BASE_URL}/v1/transfers/banks`,
+      {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "accountId": process.env.NOMBA_ACCOUNT_ID
+        }
+      }
+    );
+
+    return response.data.data;
+  } catch (error) {
+    console.error("Fetch bank codes error:", error.response?.data || error.message);
+    throw error;
+  }
+}
+
+async function lookupBankAccount({ accountNumber, bankCode }) {
+  const token = await getAccessToken();
+
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/v1/transfers/bank/lookup`,
+      {
+        accountNumber,
+        bankCode
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "accountId": process.env.NOMBA_ACCOUNT_ID
+        }
+      }
+    );
+
+    return response.data.data;
+  } catch (error) {
+    console.error("Lookup bank account error:", error.response?.data || error.message);
+    throw error;
+  }
+}
+
+async function transferToBank({ amount, accountNumber, accountName, bankCode, merchantTxRef, senderName, narration }) {
+  const token = await getAccessToken();
+
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/v2/transfers/bank`,
+      {
+        amount,
+        accountNumber,
+        accountName,
+        bankCode,
+        merchantTxRef,
+        senderName,
+        narration
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "accountId": process.env.NOMBA_ACCOUNT_ID
+        }
+      }
+    );
+
+    return response.data.data;
+  } catch (error) {
+    console.error("Transfer to bank error:", error.response?.data || error.message);
+    throw error;
+  }
+}
+
+module.exports = {
+  getAccessToken,
+  createVirtualAccount,
+  fetchVirtualAccount,
+  fetchBankCodes,
+  lookupBankAccount,
+  transferToBank
+};
