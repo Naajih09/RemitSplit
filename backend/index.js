@@ -3,7 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 
-const { createVirtualAccount, getAccessToken, fetchVirtualAccount, fetchBankCodes, lookupBankAccount, transferToBank } = require("./nomba");
+const { createVirtualAccount, getAccessToken, fetchVirtualAccount, fetchBankCodes, lookupBankAccount, transferToBank, fetchExchangeRate, convertMoney } = require("./nomba");
 const supabase = require("./supabase");
 
 app.use(express.json());
@@ -129,6 +129,26 @@ app.get("/banks", async (req, res) => {
   try {
     const banks = await fetchBankCodes();
     res.json({ success: true, banks });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.response?.data || error.message });
+  }
+});
+
+app.get("/exchange-rate", async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const rates = await fetchExchangeRate({ from, to });
+    res.json({ success: true, rates });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.response?.data || error.message });
+  }
+});
+
+app.post("/convert", async (req, res) => {
+  try {
+    const { amount, currency, destinationCurrency } = req.body;
+    const conversion = await convertMoney({ amount, currency, destinationCurrency });
+    res.json({ success: true, conversion });
   } catch (error) {
     res.status(500).json({ success: false, error: error.response?.data || error.message });
   }

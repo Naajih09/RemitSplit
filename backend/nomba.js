@@ -106,6 +106,57 @@ async function fetchBankCodes() {
   }
 }
 
+async function fetchExchangeRate({ from, to }) {
+  const token = await getAccessToken();
+
+  try {
+    const response = await axios.get(
+      `${BASE_URL}/v1/global-payout/exchange-rates`,
+      {
+        params: { from, to },
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "accountId": process.env.NOMBA_ACCOUNT_ID
+        }
+      }
+    );
+
+    return response.data.data.rates;
+  } catch (error) {
+    console.error("Fetch exchange rate error:", error.response?.data || error.message);
+    throw error;
+  }
+}
+
+async function convertMoney({ amount, currency, destinationCurrency, sourceCountryIsoCode = "NG" }) {
+  const token = await getAccessToken();
+
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/v1/global-payout/money/convert`,
+      {
+        amount,
+        currency,
+        destinationCurrency,
+        transactionType: "EXCHANGE",
+        sourceCountryIsoCode
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "accountId": process.env.NOMBA_ACCOUNT_ID
+        }
+      }
+    );
+
+    return response.data.data;
+  } catch (error) {
+    console.error("Convert money error:", error.response?.data || error.message);
+    throw error;
+  }
+}
+
 async function lookupBankAccount({ accountNumber, bankCode }) {
   const token = await getAccessToken();
 
@@ -169,5 +220,7 @@ module.exports = {
   fetchVirtualAccount,
   fetchBankCodes,
   lookupBankAccount,
-  transferToBank
+  transferToBank,
+  fetchExchangeRate,
+  convertMoney
 };
