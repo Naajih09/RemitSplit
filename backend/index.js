@@ -223,6 +223,42 @@ app.post("/withdraw", async (req, res) => {
   }
 });
 
+app.post("/contribute/quote", async (req, res) => {
+  try {
+    const { walletName, amount, currency } = req.body;
+
+    const { data: wallet, error: fetchError } = await supabase
+      .from("wallets")
+      .select("*")
+      .eq("name", walletName)
+      .single();
+
+    if (fetchError) {
+      if (fetchError.code === "PGRST116") {
+        return res.status(404).json({ success: false, error: "Wallet not found" });
+      }
+
+      console.error("Supabase fetch wallet for quote error:", fetchError);
+      return res.status(500).json({ success: false, error: fetchError.message });
+    }
+
+    const conversion = await convertMoney({
+      amount,
+      currency,
+      destinationCurrency: "NGN"
+    });
+
+    res.json({
+      success: true,
+      wallet: { name: wallet.name, account_ref: wallet.account_ref },
+      quote: conversion
+    });
+  } catch (error) {
+    console.error("Contribute quote error:", error);
+    res.status(500).json({ success: false, error: error.response?.data || error.message });
+  }
+});
+
 app.post("/test-create-split", async (req, res) => {
   try {
     const account = await createVirtualAccount({
