@@ -1,5 +1,6 @@
 require("dns").setDefaultResultOrder("ipv4first");
 require("dotenv").config();
+const crypto = require("crypto");
 const express = require("express");
 const app = express();
 
@@ -13,24 +14,57 @@ app.get("/", (req, res) => {
 });
 
 app.post("/webhooks/nomba", async (req, res) => {
-  console.log("Webhook received:", req.body);
-
   try {
-    const accountRef = req.body?.data?.accountRef || req.body?.accountRef;
-    const amountValue = req.body?.data?.amount || req.body?.amount;
-    const amountPaid = typeof amountValue === "string" ? parseFloat(amountValue) : amountValue;
+    const signature = req.headers["nomba-signature"];
+    const timestamp = req.headers["nomba-timestamp"];
+    const webhookSecret = process.env.NOMBA_WEBHOOK_SECRET;
+    const payload = req.body;
 
-    if (accountRef && !Number.isNaN(amountPaid)) {
+    if (!webhookSecret) {
+      console.warn("NOMBA_WEBHOOK_SECRET not configured - skipping signature verification");
+    } else {
+      const eventType = payload?.event_type || "";
+      const requestId = payload?.requestId || "";
+      const userId = payload?.data?.merchant?.userId || "";
+      const walletId = payload?.data?.merchant?.walletId || "";
+      const transactionId = payload?.data?.transaction?.transactionId || "";
+      const transactionType = payload?.data?.transaction?.type || "";
+      const time = payload?.data?.transaction?.time || "";
+      const responseCode = payload?.data?.transaction?.responseCode;
+      const normalizedResponseCode = responseCode === null || responseCode === undefined ? "" : String(responseCode);
+      const signString = `${eventType}:${requestId}:${userId}:${walletId}:${transactionId}:${transactionType}:${time}:${normalizedResponseCode}:${timestamp}`;
+      const expectedSignature = crypto
+        .createHmac("sha256", webhookSecret)
+        .update(signString)
+        .digest("base64");
+
+      if (!signature || expectedSignature.toLowerCase() !== String(signature).toLowerCase()) {
+        console.warn("Webhook signature mismatch - ignoring");
+        return res.status(200).json({ received: true });
+      }
+    }
+
+    const eventType = payload?.event_type;
+    if (eventType !== "payment_success") {
+      console.log(`Ignoring unsupported event type: ${eventType}`);
+      return res.status(200).json({ received: true });
+    }
+
+    const accountRef = payload?.data?.transaction?.aliasAccountReference;
+    const amountPaid = payload?.data?.transaction?.transactionAmount;
+    const numericAmountPaid = typeof amountPaid === "string" ? parseFloat(amountPaid) : amountPaid;
+
+    if (accountRef && !Number.isNaN(numericAmountPaid)) {
       const { data: wallet, error: fetchError } = await supabase
         .from("wallets")
-        .select("id, current_balance")
+        .select("id, current_balance, name, type, target_amount")
         .eq("account_ref", accountRef)
         .single();
 
       if (fetchError) {
         console.error("Supabase fetch wallet error:", fetchError);
       } else if (wallet) {
-        const updatedBalance = Number(wallet.current_balance || 0) + Number(amountPaid);
+        const updatedBalance = Number(wallet.current_balance || 0) + Number(numericAmountPaid);
         const { error: updateError } = await supabase
           .from("wallets")
           .update({ current_balance: updatedBalance })
@@ -38,12 +72,14 @@ app.post("/webhooks/nomba", async (req, res) => {
 
         if (updateError) {
           console.error("Supabase update wallet error:", updateError);
+        } else if (wallet.type === "split" && updatedBalance >= Number(wallet.target_amount || 0)) {
+          console.log(`Split target reached for ${wallet.name} - ready for auto-payout`);
         }
       } else {
         console.log(`No wallet found for account_ref=${accountRef}`);
       }
     } else {
-      console.log("Webhook missing accountRef or amount:", { accountRef, amountPaid });
+      console.log("Webhook missing accountRef or amount:", { accountRef, numericAmountPaid });
     }
   } catch (error) {
     console.error("Webhook processing error:", error);
