@@ -399,6 +399,123 @@ app.post("/contribute/quote", requireAuth, async (req, res) => {
   }
 });
 
+app.post("/wallets/:walletId/contributors", requireAuth, async (req, res) => {
+  try {
+    const { contributorUserId } = req.body;
+    const walletId = req.params.walletId;
+
+    const { data: wallet, error: ownerError } = await supabase
+      .from("wallets")
+      .select("id")
+      .eq("id", walletId)
+      .eq("user_id", req.userId)
+      .single();
+
+    if (ownerError || !wallet) {
+      return res.status(403).json({ success: false, error: "Only the wallet owner can add contributors" });
+    }
+
+    const { data: contributor, error: insertError } = await supabase
+      .from("wallet_contributors")
+      .insert([
+        {
+          wallet_id: walletId,
+          user_id: contributorUserId,
+          added_by: req.userId
+        }
+      ])
+      .select("*")
+      .single();
+
+    if (insertError) {
+      if (insertError.code === "23505") {
+        return res.status(200).json({ success: true, message: "Contributor already has access" });
+      }
+
+      console.error("Supabase insert contributor error:", insertError);
+      return res.status(500).json({ success: false, error: insertError.message });
+    }
+
+    res.json({ success: true, contributor });
+  } catch (error) {
+    console.error("Add contributor error:", error);
+    res.status(500).json({ success: false, error: error.response?.data || error.message });
+  }
+});
+
+app.get("/wallets/:walletId/balance", requireAuth, async (req, res) => {
+  try {
+    const walletId = req.params.walletId;
+    const { data: wallet, error } = await supabase
+      .from("wallets")
+      .select("name, current_balance, target_amount, status")
+      .eq("id", walletId)
+      .single();
+
+    if (error || !wallet) {
+      return res.status(404).json({ success: false, error: "Wallet not found or access denied" });
+    }
+
+    res.json({
+      success: true,
+      wallet: {
+        name: wallet.name,
+        current_balance: wallet.current_balance,
+        target_amount: wallet.target_amount,
+        status: wallet.status
+      }
+    });
+  } catch (error) {
+    console.error("Fetch wallet balance error:", error);
+    res.status(500).json({ success: false, error: error.response?.data || error.message });
+  }
+});
+
+app.get("/wallets/:walletId/contributors", requireAuth, async (req, res) => {
+  try {
+    const walletId = req.params.walletId;
+
+    const { data: ownerWallet, error: ownerError } = await supabase
+      .from("wallets")
+      .select("id")
+      .eq("id", walletId)
+      .eq("user_id", req.userId)
+      .single();
+
+    let authorized = !!ownerWallet && !ownerError;
+
+    if (!authorized) {
+      const { data: contributorRow, error: contributorError } = await supabase
+        .from("wallet_contributors")
+        .select("id")
+        .eq("wallet_id", walletId)
+        .eq("user_id", req.userId)
+        .single();
+
+      authorized = !!contributorRow && !contributorError;
+    }
+
+    if (!authorized) {
+      return res.status(403).json({ success: false, error: "Access denied" });
+    }
+
+    const { data: contributors, error } = await supabase
+      .from("wallet_contributors")
+      .select("*")
+      .eq("wallet_id", walletId);
+
+    if (error) {
+      console.error("Fetch wallet contributors error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    res.json({ success: true, contributors });
+  } catch (error) {
+    console.error("Wallet contributors error:", error);
+    res.status(500).json({ success: false, error: error.response?.data || error.message });
+  }
+});
+
 app.post("/test-create-split", async (req, res) => {
   try {
     const account = await createVirtualAccount({
