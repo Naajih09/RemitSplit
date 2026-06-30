@@ -1,8 +1,10 @@
 require("dns").setDefaultResultOrder("ipv4first");
 require("dotenv").config();
+const cors = require("cors");
 const crypto = require("crypto");
 const express = require("express");
 const app = express();
+app.use(cors());
 
 const { createVirtualAccount, getAccessToken, fetchVirtualAccount, fetchBankCodes, lookupBankAccount, transferToBank, fetchExchangeRate, convertMoney } = require("./nomba");
 const supabase = require("./supabase");
