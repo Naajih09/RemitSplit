@@ -7,6 +7,24 @@ const app = express();
 const { createVirtualAccount, getAccessToken, fetchVirtualAccount, fetchBankCodes, lookupBankAccount, transferToBank, fetchExchangeRate, convertMoney } = require("./nomba");
 const supabase = require("./supabase");
 
+async function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ success: false, error: "Missing or invalid Authorization header" });
+  }
+
+  const token = authHeader.split(" ")[1];
+  const { data, error } = await supabase.auth.getUser(token);
+
+  if (error || !data.user) {
+    return res.status(401).json({ success: false, error: "Invalid or expired token" });
+  }
+
+  req.userId = data.user.id;
+  next();
+}
+
 app.use(express.json());
 
 app.get("/", (req, res) => {
@@ -149,7 +167,37 @@ app.get("/test-auth", async (req, res) => {
   }
 });
 
-app.post("/wallets", async (req, res) => {
+app.post("/auth/signup", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const { data, error } = await supabase.auth.signUp({ email, password });
+
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+
+    res.json({ success: true, user: data.user, session: data.session });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post("/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      return res.status(401).json({ success: false, error: error.message });
+    }
+
+    res.json({ success: true, user: data.user, session: data.session });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post("/wallets", requireAuth, async (req, res) => {
   try {
     const { name, type, target_amount, beneficiary_bank_details } = req.body;
 
@@ -158,6 +206,7 @@ app.post("/wallets", async (req, res) => {
         .from("wallets")
         .select("*")
         .eq("name", name)
+        .eq("user_id", req.userId)
         .single();
 
       if (fetchError && fetchError.code !== "PGRST116") {
@@ -195,7 +244,8 @@ app.post("/wallets", async (req, res) => {
           target_amount,
           current_balance: 0,
           beneficiary_bank_details,
-          status: "active"
+          status: "active",
+          user_id: req.userId
         }
       ])
       .select("*")
@@ -252,7 +302,7 @@ app.post("/verify-account", async (req, res) => {
   }
 });
 
-app.post("/withdraw", async (req, res) => {
+app.post("/withdraw", requireAuth, async (req, res) => {
   try {
     const { walletName, amount, accountNumber, accountName, bankCode } = req.body;
 
@@ -260,6 +310,7 @@ app.post("/withdraw", async (req, res) => {
       .from("wallets")
       .select("*")
       .eq("name", walletName)
+      .eq("user_id", req.userId)
       .single();
 
     if (fetchError) {
@@ -311,7 +362,7 @@ app.post("/withdraw", async (req, res) => {
   }
 });
 
-app.post("/contribute/quote", async (req, res) => {
+app.post("/contribute/quote", requireAuth, async (req, res) => {
   try {
     const { walletName, amount, currency } = req.body;
 
@@ -319,6 +370,7 @@ app.post("/contribute/quote", async (req, res) => {
       .from("wallets")
       .select("*")
       .eq("name", walletName)
+      .eq("user_id", req.userId)
       .single();
 
     if (fetchError) {
