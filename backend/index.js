@@ -57,7 +57,7 @@ app.post("/webhooks/nomba", async (req, res) => {
     if (accountRef && !Number.isNaN(numericAmountPaid)) {
       const { data: wallet, error: fetchError } = await supabase
         .from("wallets")
-        .select("id, current_balance, name, type, target_amount")
+        .select("id, current_balance, name, type, target_amount, status, beneficiary_bank_details")
         .eq("account_ref", accountRef)
         .single();
 
@@ -72,8 +72,60 @@ app.post("/webhooks/nomba", async (req, res) => {
 
         if (updateError) {
           console.error("Supabase update wallet error:", updateError);
-        } else if (wallet.type === "split" && updatedBalance >= Number(wallet.target_amount || 0)) {
-          console.log(`Split target reached for ${wallet.name} - ready for auto-payout`);
+        } else {
+          // If this is a split wallet and the target is reached, attempt auto-payout
+          try {
+            const targetAmount = Number(wallet.target_amount || 0);
+            if (wallet.type === "split" && updatedBalance >= targetAmount) {
+              if (wallet.status === "completed") {
+                console.log(`Split ${wallet.name} already completed, skipping duplicate payout`);
+              } else {
+                // Parse beneficiary details which may be returned as object or string
+                let beneficiary = wallet.beneficiary_bank_details;
+                try {
+                  if (typeof beneficiary === "string" && beneficiary.trim() !== "") {
+                    beneficiary = JSON.parse(beneficiary);
+                  }
+                } catch (parseErr) {
+                  console.error(`Cannot parse beneficiary_bank_details for ${wallet.name}:`, parseErr.message || parseErr);
+                  beneficiary = null;
+                }
+
+                if (!beneficiary || !beneficiary.accountNumber || !beneficiary.bankCode || !beneficiary.accountName) {
+                  console.error(`Cannot auto-payout split ${wallet.name}: missing beneficiary bank details`);
+                } else {
+                  try {
+                    const merchantTxRef = `split-payout-${wallet.id}-${Date.now()}`;
+                    const transferResult = await transferToBank({
+                      amount: updatedBalance,
+                      accountNumber: beneficiary.accountNumber,
+                      accountName: beneficiary.accountName,
+                      bankCode: beneficiary.bankCode,
+                      merchantTxRef,
+                      senderName: "RemitSplit",
+                      narration: `Split payout for ${wallet.name}`
+                    });
+
+                    // On success, mark wallet as completed
+                    const { error: statusUpdateError } = await supabase
+                      .from("wallets")
+                      .update({ status: "completed" })
+                      .eq("id", wallet.id);
+
+                    if (statusUpdateError) {
+                      console.error(`Failed to update status to completed for ${wallet.name}:`, statusUpdateError);
+                    } else {
+                      console.log(`Split auto-payout successful for ${wallet.name}`, { transferResult });
+                    }
+                  } catch (payoutErr) {
+                    console.error(`Split auto-payout failed for ${wallet.name}:`, payoutErr.response?.data || payoutErr.message || payoutErr);
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.error(`Error handling split payout for ${wallet.name}:`, err);
+          }
         }
       } else {
         console.log(`No wallet found for account_ref=${accountRef}`);
