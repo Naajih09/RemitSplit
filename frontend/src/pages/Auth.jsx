@@ -43,11 +43,13 @@ function Auth({ theme, toggleTheme }) {
   return (
     <div className={`min-h-screen px-3 py-6 sm:px-4 sm:py-10 ${isLight ? "bg-[#FEF7D2] text-[#111827]" : "bg-[#050505] text-white"}`}>
       <div className={`mx-auto w-full max-w-md overflow-hidden rounded-[20px] sm:rounded-[32px] border px-0 ${isLight ? "border-[#D4A574] bg-[#fff5c6] shadow-[0_24px_60px_rgba(255,214,0,0.12)]" : "border-[#1E1E1E] bg-[#0B0B0B] shadow-[0_28px_80px_rgba(0,0,0,0.45)]"}`}>
-        <div className={`px-6 py-8 sm:px-8 sm:py-10 text-center ${isLight ? "bg-[#FFF2A5]" : "bg-[#111111]"}`}>
+        <div className={`px-4 py-6 sm:px-6 sm:py-8 text-center ${isLight ? "bg-[#FFF2A5]" : "bg-[#111111]"}`}>
           <div className="flex items-center justify-between gap-3">
             <div className="text-left">
               <h1 className={`text-3xl sm:text-4xl font-display font-semibold tracking-tight ${isLight ? "text-[#111827]" : "text-white"}`}>RemitSplit</h1>
-              <p className={`mt-3 max-w-sm text-sm leading-6 ${isLight ? "text-[#7A5F0D]" : "text-[#C1C1C1]"}`}>A sleek contribution wallet experience with a bold, clean theme.</p>
+              <p className={`mt-3 max-w-sm text-sm leading-6 ${isLight ? "text-[#7A5F0D]" : "text-[#C1C1C1]"}`}>
+                Create and manage shared contribution wallets — invite contributors, set a target amount, track balances in real time, and withdraw to linked bank accounts.
+              </p>
             </div>
             <button
               type="button"

@@ -3,6 +3,10 @@
 :root {
   --font-display: 'Fraunces', serif;
   --font-body: 'Inter', sans-serif;
+  --nomba-gold: #FFD600;
+  --nomba-gold-600: #D4A574;
+  --nomba-warm-100: #FFF7D0;
+  --nomba-warm-200: #FFF3A7;
 }
 
 body {
@@ -18,9 +22,17 @@ body.theme-dark {
 }
 
 body.theme-light {
-  background: radial-gradient(circle at top, rgba(255,214,0,0.14), transparent 28%),
-    linear-gradient(180deg, #FFF9E5 0%, #F9F1D0 100%);
+  background: radial-gradient(circle at top, rgba(255,214,0,0.12), transparent 28%),
+    linear-gradient(180deg, var(--nomba-warm-100) 0%, #FFF7EA 100%);
   color: #111827;
+}
+
+/* Nomba card utility to keep consistent rounded shapes and subtle borders */
+.nomba-card {
+  border-radius: 20px;
+  border: 1px solid rgba(0,0,0,0.06);
+  background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.4));
+  box-shadow: 0 12px 30px rgba(2,6,23,0.06);
 }
 
 .font-display {

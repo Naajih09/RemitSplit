@@ -160,7 +160,7 @@ function Dashboard({ theme, toggleTheme }) {
   return (
     <div className={`min-h-screen ${isLight ? "bg-[#FEF7D2] text-[#111827]" : "bg-[#080808] text-white"}`}>
       <div className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8">
-        <header className={`mb-6 sm:mb-8 flex flex-col gap-3 rounded-[20px] sm:rounded-[32px] border p-4 sm:p-6 sm:flex-row sm:items-center sm:justify-between ${isLight ? "border-[#D4A574] bg-[#FFF7D0] shadow-[0_20px_50px_rgba(255,214,0,0.12)]" : "border-[#232323] bg-[#0D0D0D] shadow-[0_30px_80px_rgba(0,0,0,0.45)]"}`}>
+        <header className={`mb-4 sm:mb-6 flex flex-col gap-2 rounded-[16px] sm:rounded-[28px] border p-3 sm:p-5 sm:flex-row sm:items-center sm:justify-between ${isLight ? "border-[#D4A574] bg-[#FFF7D0] shadow-[0_20px_50px_rgba(255,214,0,0.12)]" : "border-[#232323] bg-[#0D0D0D] shadow-[0_30px_80px_rgba(0,0,0,0.45)]"}`}>
           <div>
             <p className={`text-sm uppercase tracking-[0.24em] ${isLight ? "text-[#8C7135]" : "text-[#B8B8B8]"}`}>RemitSplit</p>
             <h1 className={`mt-1 text-3xl sm:text-4xl font-display font-semibold ${isLight ? "text-[#111827]" : "text-white"}`}>Your Contribution Wallet</h1>
