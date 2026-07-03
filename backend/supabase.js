@@ -1,8 +1,13 @@
 const { createClient } = require("@supabase/supabase-js");
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL,
+  process.env.NOMBA_SUPABASE_SERVICE_KEY
+);
 
-module.exports = supabase;
+module.exports = { supabase, supabaseAdmin };

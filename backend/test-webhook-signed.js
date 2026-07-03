@@ -30,7 +30,7 @@ const payload = {
     },
     transaction: {
       aliasAccountNumber: "9900012345",
-      aliasAccountReference: "manual-test-001",
+      aliasAccountReference: "wallet-1782797492217",
       transactionAmount: 250,
       transactionId: transactionId,
       type: transactionType,

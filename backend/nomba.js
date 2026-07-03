@@ -5,6 +5,11 @@ let tokenExpiry = null;
 
 const BASE_URL = "https://sandbox.nomba.com";
 
+function clearAccessToken() {
+  cachedToken = null;
+  tokenExpiry = null;
+}
+
 async function getAccessToken() {
   if (cachedToken && tokenExpiry && Date.now() < tokenExpiry) {
     return cachedToken;
@@ -32,14 +37,27 @@ async function getAccessToken() {
     return cachedToken;
   } catch (error) {
     console.error("Nomba auth error:", error.response?.data || error.message);
+    clearAccessToken();
+    throw error;
+  }
+}
+
+async function withTokenRetry(action) {
+  try {
+    return await action();
+  } catch (error) {
+    const status = error.response?.status;
+    if (status === 401 || status === 403) {
+      clearAccessToken();
+      return await action();
+    }
     throw error;
   }
 }
 
 async function createVirtualAccount({ accountRef, accountName, expectedAmount, expiryDate }) {
-  const token = await getAccessToken();
-
-  try {
+  return withTokenRetry(async () => {
+    const token = await getAccessToken();
     const response = await axios.post(
       `${BASE_URL}/v1/accounts/virtual`,
       {
@@ -58,16 +76,12 @@ async function createVirtualAccount({ accountRef, accountName, expectedAmount, e
     );
 
     return response.data.data;
-  } catch (error) {
-    console.error("Create virtual account error:", error.response?.data || error.message);
-    throw error;
-  }
+  });
 }
 
 async function fetchVirtualAccount(accountRef) {
-  const token = await getAccessToken();
-
-  try {
+  return withTokenRetry(async () => {
+    const token = await getAccessToken();
     const response = await axios.get(
       `${BASE_URL}/v1/accounts/virtual/${accountRef}`,
       {
@@ -79,16 +93,12 @@ async function fetchVirtualAccount(accountRef) {
     );
 
     return response.data.data;
-  } catch (error) {
-    console.error("Fetch virtual account error:", error.response?.data || error.message);
-    throw error;
-  }
+  });
 }
 
 async function fetchBankCodes() {
-  const token = await getAccessToken();
-
-  try {
+  return withTokenRetry(async () => {
+    const token = await getAccessToken();
     const response = await axios.get(
       `${BASE_URL}/v1/transfers/banks`,
       {
@@ -100,16 +110,12 @@ async function fetchBankCodes() {
     );
 
     return response.data.data;
-  } catch (error) {
-    console.error("Fetch bank codes error:", error.response?.data || error.message);
-    throw error;
-  }
+  });
 }
 
 async function fetchExchangeRate({ from, to }) {
-  const token = await getAccessToken();
-
-  try {
+  return withTokenRetry(async () => {
+    const token = await getAccessToken();
     const response = await axios.get(
       `${BASE_URL}/v1/global-payout/exchange-rates`,
       {
@@ -122,16 +128,12 @@ async function fetchExchangeRate({ from, to }) {
     );
 
     return response.data.data.rates;
-  } catch (error) {
-    console.error("Fetch exchange rate error:", error.response?.data || error.message);
-    throw error;
-  }
+  });
 }
 
 async function convertMoney({ amount, currency, destinationCurrency, sourceCountryIsoCode = "NG" }) {
-  const token = await getAccessToken();
-
-  try {
+  return withTokenRetry(async () => {
+    const token = await getAccessToken();
     const response = await axios.post(
       `${BASE_URL}/v1/global-payout/money/convert`,
       {
@@ -151,16 +153,12 @@ async function convertMoney({ amount, currency, destinationCurrency, sourceCount
     );
 
     return response.data.data;
-  } catch (error) {
-    console.error("Convert money error:", error.response?.data || error.message);
-    throw error;
-  }
+  });
 }
 
 async function lookupBankAccount({ accountNumber, bankCode }) {
-  const token = await getAccessToken();
-
-  try {
+  return withTokenRetry(async () => {
+    const token = await getAccessToken();
     const response = await axios.post(
       `${BASE_URL}/v1/transfers/bank/lookup`,
       {
@@ -177,10 +175,7 @@ async function lookupBankAccount({ accountNumber, bankCode }) {
     );
 
     return response.data.data;
-  } catch (error) {
-    console.error("Lookup bank account error:", error.response?.data || error.message);
-    throw error;
-  }
+  });
 }
 
 async function transferToBank({ amount, accountNumber, accountName, bankCode, merchantTxRef, senderName, narration }) {

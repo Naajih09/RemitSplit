@@ -7,7 +7,7 @@ const app = express();
 app.use(cors());
 
 const { createVirtualAccount, getAccessToken, fetchVirtualAccount, fetchBankCodes, lookupBankAccount, transferToBank, fetchExchangeRate, convertMoney } = require("./nomba");
-const supabase = require("./supabase");
+const { supabase, supabaseAdmin } = require("./supabase");
 
 async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -43,7 +43,7 @@ app.post("/webhooks/nomba", async (req, res) => {
     if (!webhookSecret) {
       console.warn("NOMBA_WEBHOOK_SECRET not configured - skipping signature verification");
     } else {
-      const eventType = payload?.event_type || "";
+      const sigEventType = payload?.event_type || "";
       const requestId = payload?.requestId || "";
       const userId = payload?.data?.merchant?.userId || "";
       const walletId = payload?.data?.merchant?.walletId || "";
@@ -52,7 +52,7 @@ app.post("/webhooks/nomba", async (req, res) => {
       const time = payload?.data?.transaction?.time || "";
       const responseCode = payload?.data?.transaction?.responseCode;
       const normalizedResponseCode = responseCode === null || responseCode === undefined ? "" : String(responseCode);
-      const signString = `${eventType}:${requestId}:${userId}:${walletId}:${transactionId}:${transactionType}:${time}:${normalizedResponseCode}:${timestamp}`;
+      const signString = `${sigEventType}:${requestId}:${userId}:${walletId}:${transactionId}:${transactionType}:${time}:${normalizedResponseCode}:${timestamp}`;
       const expectedSignature = crypto
         .createHmac("sha256", webhookSecret)
         .update(signString)
@@ -75,7 +75,11 @@ app.post("/webhooks/nomba", async (req, res) => {
     const numericAmountPaid = typeof amountPaid === "string" ? parseFloat(amountPaid) : amountPaid;
 
     if (accountRef && !Number.isNaN(numericAmountPaid)) {
-      const { data: wallet, error: fetchError } = await supabase
+      if (!supabaseAdmin || typeof supabaseAdmin.from !== "function") {
+        throw new Error("supabaseAdmin client is unavailable or invalid");
+      }
+
+      const { data: wallet, error: fetchError } = await supabaseAdmin
         .from("wallets")
         .select("id, current_balance, name, type, target_amount, status, beneficiary_bank_details")
         .eq("account_ref", accountRef)
@@ -85,7 +89,7 @@ app.post("/webhooks/nomba", async (req, res) => {
         console.error("Supabase fetch wallet error:", fetchError);
       } else if (wallet) {
         const updatedBalance = Number(wallet.current_balance || 0) + Number(numericAmountPaid);
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseAdmin
           .from("wallets")
           .update({ current_balance: updatedBalance })
           .eq("id", wallet.id);
@@ -127,7 +131,7 @@ app.post("/webhooks/nomba", async (req, res) => {
                     });
 
                     // On success, mark wallet as completed
-                    const { error: statusUpdateError } = await supabase
+                    const { error: statusUpdateError } = await supabaseAdmin
                       .from("wallets")
                       .update({ status: "completed" })
                       .eq("id", wallet.id);
@@ -201,51 +205,72 @@ app.post("/auth/login", async (req, res) => {
 
 app.post("/wallets", requireAuth, async (req, res) => {
   try {
-    const { name, type, target_amount, beneficiary_bank_details } = req.body;
+    const { name, type, target_amount, contributor_count, beneficiary_bank_details } = req.body;
+    const walletType = type === "split" ? "split" : "wallet";
 
-    if (name) {
-      const { data: existingWallet, error: fetchError } = await supabase
-        .from("wallets")
-        .select("*")
-        .eq("name", name)
-        .eq("user_id", req.userId)
-        .single();
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, error: "Wallet name is required" });
+    }
 
-      if (fetchError && fetchError.code !== "PGRST116") {
-        console.error("Supabase fetch existing wallet error:", fetchError);
-        return res.status(500).json({ success: false, error: fetchError.message });
+    if (walletType === "split") {
+      if (!target_amount || Number(target_amount) <= 0) {
+        return res.status(400).json({ success: false, error: "Target amount is required for split wallets" });
       }
-
-      if (existingWallet) {
-        console.log(`Reusing existing wallet for name=${name}`);
-        return res.json({ success: true, wallet: existingWallet, reused: true });
+      if (!contributor_count || Number(contributor_count) <= 0) {
+        return res.status(400).json({ success: false, error: "Contributor count is required for split wallets" });
       }
     }
 
-    const accountRef = `${type === "split" ? "split" : "wallet"}-${Date.now()}`;
-    const expectedAmount = target_amount ? String(target_amount) : "0.00";
-    const expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 19)
-      .replace("T", " ");
+    if (walletType === "remit" && !beneficiary_bank_details) {
+      return res.status(400).json({ success: false, error: "Beneficiary bank details are required for remit wallets" });
+    }
 
-    const virtualAccount = await createVirtualAccount({
+    const { data: existingWallet, error: fetchError } = await supabaseAdmin
+      .from("wallets")
+      .select("*")
+      .eq("name", name)
+      .eq("type", walletType)
+      .eq("user_id", req.userId)
+      .single();
+
+    if (fetchError && fetchError.code !== "PGRST116") {
+      console.error("Supabase fetch existing wallet error:", fetchError);
+      return res.status(500).json({ success: false, error: fetchError.message });
+    }
+
+    if (existingWallet) {
+      console.log(`Reusing existing wallet for name=${name} type=${walletType}`);
+      return res.json({ success: true, wallet: existingWallet, reused: true });
+    }
+
+    const accountRef = `${walletType === "split" ? "split" : "wallet"}-${Date.now()}`;
+    const expectedAmount = walletType === "split" ? String(target_amount) : "0.00";
+    const accountPayload = {
       accountRef,
       accountName: name || accountRef,
-      expectedAmount,
-      expiryDate
-    });
+      expectedAmount
+    };
 
-    const { data: wallet, error: insertError } = await supabase
+    if (walletType === "split") {
+      accountPayload.expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 19)
+        .replace("T", " ");
+    }
+
+    const virtualAccount = await createVirtualAccount(accountPayload);
+
+    const { data: wallet, error: insertError } = await supabaseAdmin
       .from("wallets")
       .insert([
         {
           account_ref: accountRef,
           name,
-          type,
-          target_amount,
+          type: walletType,
+          target_amount: walletType === "split" ? Number(target_amount) : null,
+          contributor_count: walletType === "split" ? Number(contributor_count) : null,
           current_balance: 0,
-          beneficiary_bank_details,
+          beneficiary_bank_details: walletType === "remit" ? beneficiary_bank_details : null,
           status: "active",
           user_id: req.userId
         }
@@ -308,7 +333,7 @@ app.post("/withdraw", requireAuth, async (req, res) => {
   try {
     const { walletName, amount, accountNumber, accountName, bankCode } = req.body;
 
-    const { data: wallet, error: fetchError } = await supabase
+    const { data: wallet, error: fetchError } = await supabaseAdmin
       .from("wallets")
       .select("*")
       .eq("name", walletName)
@@ -347,7 +372,7 @@ app.post("/withdraw", requireAuth, async (req, res) => {
     });
 
     const updatedBalance = currentBalance - parsedAmount;
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
       .from("wallets")
       .update({ current_balance: updatedBalance })
       .eq("id", wallet.id);
@@ -368,7 +393,7 @@ app.post("/contribute/quote", requireAuth, async (req, res) => {
   try {
     const { walletName, amount, currency } = req.body;
 
-    const { data: wallet, error: fetchError } = await supabase
+    const { data: wallet, error: fetchError } = await supabaseAdmin
       .from("wallets")
       .select("*")
       .eq("name", walletName)
@@ -406,7 +431,7 @@ app.post("/wallets/:walletId/contributors", requireAuth, async (req, res) => {
     const { contributorUserId } = req.body;
     const walletId = req.params.walletId;
 
-    const { data: wallet, error: ownerError } = await supabase
+    const { data: wallet, error: ownerError } = await supabaseAdmin
       .from("wallets")
       .select("id")
       .eq("id", walletId)
@@ -417,7 +442,7 @@ app.post("/wallets/:walletId/contributors", requireAuth, async (req, res) => {
       return res.status(403).json({ success: false, error: "Only the wallet owner can add contributors" });
     }
 
-    const { data: contributor, error: insertError } = await supabase
+    const { data: contributor, error: insertError } = await supabaseAdmin
       .from("wallet_contributors")
       .insert([
         {
@@ -448,7 +473,7 @@ app.post("/wallets/:walletId/contributors", requireAuth, async (req, res) => {
 app.get("/wallets/:walletId/balance", requireAuth, async (req, res) => {
   try {
     const walletId = req.params.walletId;
-    const { data: wallet, error } = await supabase
+    const { data: wallet, error } = await supabaseAdmin
       .from("wallets")
       .select("name, current_balance, target_amount, status")
       .eq("id", walletId)
@@ -477,7 +502,7 @@ app.get("/wallets/:walletId/contributors", requireAuth, async (req, res) => {
   try {
     const walletId = req.params.walletId;
 
-    const { data: ownerWallet, error: ownerError } = await supabase
+    const { data: ownerWallet, error: ownerError } = await supabaseAdmin
       .from("wallets")
       .select("id")
       .eq("id", walletId)
@@ -487,7 +512,7 @@ app.get("/wallets/:walletId/contributors", requireAuth, async (req, res) => {
     let authorized = !!ownerWallet && !ownerError;
 
     if (!authorized) {
-      const { data: contributorRow, error: contributorError } = await supabase
+      const { data: contributorRow, error: contributorError } = await supabaseAdmin
         .from("wallet_contributors")
         .select("id")
         .eq("wallet_id", walletId)
@@ -501,7 +526,7 @@ app.get("/wallets/:walletId/contributors", requireAuth, async (req, res) => {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
-    const { data: contributors, error } = await supabase
+    const { data: contributors, error } = await supabaseAdmin
       .from("wallet_contributors")
       .select("*")
       .eq("wallet_id", walletId);
@@ -533,11 +558,44 @@ app.post("/test-create-split", async (req, res) => {
   }
 });
 
-app.get("/test-fetch-account/:accountRef", async (req, res) => {
+app.get("/public/split/:accountRef", async (req, res) => {
   try {
-    const account = await fetchVirtualAccount(req.params.accountRef);
-    res.json({ success: true, account });
+    const accountRef = req.params.accountRef;
+    const { data: wallet, error: walletError } = await supabaseAdmin
+      .from("wallets")
+      .select("id, name, type, target_amount, contributor_count, current_balance, status")
+      .eq("account_ref", accountRef)
+      .single();
+
+    if (walletError || !wallet) {
+      return res.status(404).json({ success: false, error: "Split payment page not found" });
+    }
+
+    if (wallet.type !== "split") {
+      return res.status(404).json({ success: false, error: "Split payment page not found" });
+    }
+
+    const account = await fetchVirtualAccount(accountRef);
+
+    res.json({
+      success: true,
+      payment: {
+        accountRef,
+        accountName: account.accountName || wallet.name,
+        expectedAmount: account.expectedAmount ?? String(wallet.target_amount || "0.00"),
+        expiryDate: account.expiryDate || null,
+        accountNumber: account.accountNumber || null,
+      },
+      wallet: {
+        id: wallet.id,
+        name: wallet.name,
+        current_balance: wallet.current_balance,
+        target_amount: wallet.target_amount,
+        status: wallet.status,
+      },
+    });
   } catch (error) {
+    console.error("Fetch split payment details error:", error);
     res.status(500).json({ success: false, error: error.response?.data || error.message });
   }
 });

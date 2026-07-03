@@ -31,8 +31,12 @@ function Dashboard({ theme, toggleTheme }) {
   const isLight = theme === "light";
   const navigate = useNavigate();
   const [walletName, setWalletName] = useState("");
-  const [walletType, setWalletType] = useState("wallet");
+  const [mode, setMode] = useState("remit");
   const [targetAmount, setTargetAmount] = useState("");
+  const [contributorsCount, setContributorsCount] = useState("");
+  const [beneficiaryName, setBeneficiaryName] = useState("");
+  const [beneficiaryAccountNumber, setBeneficiaryAccountNumber] = useState("");
+  const [beneficiaryBankCode, setBeneficiaryBankCode] = useState("");
   const [wallet, setWallet] = useState(null);
   const [contributors, setContributors] = useState([]);
   const [contributorUserId, setContributorUserId] = useState("");
@@ -65,15 +69,34 @@ function Dashboard({ theme, toggleTheme }) {
         throw new Error("Wallet name is required");
       }
 
-      if (walletType === "split" && (!targetAmount || Number(targetAmount) <= 0)) {
-        throw new Error("Target amount is required for split wallets");
+      if (mode === "split") {
+        if (!targetAmount || Number(targetAmount) <= 0) {
+          throw new Error("Target amount is required for split wallets");
+        }
+        if (!contributorsCount || Number(contributorsCount) <= 0) {
+          throw new Error("Contributors count is required for split wallets");
+        }
+      }
+
+      if (mode === "remit") {
+        if (!beneficiaryName.trim()) {
+          throw new Error("Beneficiary name is required for remit mode");
+        }
+        if (!beneficiaryAccountNumber.trim()) {
+          throw new Error("Beneficiary account number is required for remit mode");
+        }
       }
 
       const body = {
         name: walletName.trim(),
-        type: walletType,
-        target_amount: walletType === "split" ? Number(targetAmount) : null,
-        beneficiary_bank_details: null,
+        type: mode === "split" ? "split" : "wallet",
+        target_amount: mode === "split" ? Number(targetAmount) : null,
+        contributor_count: mode === "split" ? Number(contributorsCount) : null,
+        beneficiary_bank_details: mode === "remit" ? {
+          name: beneficiaryName,
+          account_number: beneficiaryAccountNumber,
+          bank_code: beneficiaryBankCode,
+        } : null,
       };
 
       const data = await apiRequest("/wallets", {
@@ -190,7 +213,9 @@ function Dashboard({ theme, toggleTheme }) {
                 <p className={`text-sm uppercase tracking-[0.3em] ${isLight ? "text-[#8C7135]" : "text-[#A0A8A0]"}`}>Wallet Control</p>
                 <h2 className={`mt-2 text-2xl font-display font-semibold ${isLight ? "text-[#111827]" : "text-white"}`}>Create or find a wallet</h2>
                 <p className={`mt-2 text-sm leading-6 ${isLight ? "text-[#7A5F0D]" : "text-[#C0C0C0]"}`}>
-                  Enter a wallet name to reuse an existing wallet or open a new contribution wallet instantly.
+                  {mode === "remit"
+                    ? "Create a shared family wallet for regular diaspora contributions, or open an existing one."
+                    : "Create a one-off split collection with a target amount and contributor count."}
                 </p>
               </div>
             </div>
@@ -215,23 +240,32 @@ function Dashboard({ theme, toggleTheme }) {
                       value={walletName}
                       onChange={(event) => setWalletName(event.target.value)}
                       className={`w-full rounded-3xl border px-4 py-3 ${isLight ? "border-[#D4A574] bg-[#FFF8D2] text-[#111827] placeholder:text-[#B38A2D] focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]" : "border-[#333333] bg-[#121212] text-white placeholder:text-[#6F6F6F] focus:ring-2 focus:ring-white/70 focus:border-white"}`}
-                      placeholder="e.g. Family Wallet"
+                      placeholder={mode === "remit" ? "e.g. Mama's Support Fund" : "e.g. Eid Contribution"}
                     />
                   </div>
 
-                  <div>
-                    <label className={`block text-sm font-medium mb-1 ${isLight ? "text-[#7A5F0D]" : "text-[#D9D9D9]"}`}>Type</label>
-                    <select
-                      value={walletType}
-                      onChange={(event) => setWalletType(event.target.value)}
-                      className={`w-full rounded-3xl border px-4 py-3 ${isLight ? "border-[#D4A574] bg-[#FFF8D2] text-[#111827] focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]" : "border-[#333333] bg-[#121212] text-white focus:ring-2 focus:ring-white/70 focus:border-white"}`}
-                    >
-                      <option value="wallet">Wallet</option>
-                      <option value="split">Split</option>
-                    </select>
-                  </div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setMode("remit")}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${mode === "remit" ? (isLight ? "bg-[#111827] text-white" : "bg-[#FFD600] text-[#101010]") : (isLight ? "bg-[#FFF3A7] text-[#7A5F0D] hover:bg-[#FFE77E]" : "bg-[#111111] text-[#FFD600] hover:bg-[#1E1E1E]")}`}
+                >
+                  Remit Mode
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("split")}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${mode === "split" ? (isLight ? "bg-[#111827] text-white" : "bg-[#FFD600] text-[#101010]") : (isLight ? "bg-[#FFF3A7] text-[#7A5F0D] hover:bg-[#FFE77E]" : "bg-[#111111] text-[#FFD600] hover:bg-[#1E1E1E]")}`}
+                >
+                  Split Mode
+                </button>
+              </div>
 
-              {walletType === "split" && (
+              <div className={`mb-4 rounded-3xl border p-4 ${isLight ? "border-[#D4A574] bg-[#FFF8D2] text-[#111827]" : "border-[#333333] bg-[#111111] text-white"}`}>
+                <p className="text-sm font-semibold">{mode === "remit" ? "Remit Mode: Family wallet with a fixed beneficiary" : "Split Mode: One-off group collection with a target amount"}</p>
+              </div>
+
+              {mode === "split" && (
                 <div>
                   <label className={`block text-sm font-medium mb-1 ${isLight ? "text-[#7A5F0D]" : "text-[#D9D9D9]"}`}>Target Amount</label>
                   <input
@@ -246,18 +280,142 @@ function Dashboard({ theme, toggleTheme }) {
                 </div>
               )}
 
+              {mode === "split" && (
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isLight ? "text-[#7A5F0D]" : "text-[#D9D9D9]"}`}>Contributors Count</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={contributorsCount}
+                    onChange={(event) => setContributorsCount(event.target.value)}
+                    className={`w-full rounded-3xl border px-4 py-3 ${isLight ? "border-[#D4A574] bg-[#FFF8D2] text-[#111827] placeholder:text-[#B38A2D] focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]" : "border-[#333333] bg-[#121212] text-white placeholder:text-[#6F6F6F] focus:ring-2 focus:ring-white/70 focus:border-white"}`}
+                    placeholder="e.g. 5"
+                  />
+                </div>
+              )}
+
+              {mode === "remit" && (
+                <>
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${isLight ? "text-[#7A5F0D]" : "text-[#D9D9D9]"}`}>Beneficiary Name</label>
+                    <input
+                      type="text"
+                      value={beneficiaryName}
+                      onChange={(event) => setBeneficiaryName(event.target.value)}
+                      className={`w-full rounded-3xl border px-4 py-3 ${isLight ? "border-[#D4A574] bg-[#FFF8D2] text-[#111827] placeholder:text-[#B38A2D] focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]" : "border-[#333333] bg-[#121212] text-white placeholder:text-[#6F6F6F] focus:ring-2 focus:ring-white/70 focus:border-white"}`}
+                      placeholder="e.g. Mama Aisha"
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${isLight ? "text-[#7A5F0D]" : "text-[#D9D9D9]"}`}>Beneficiary Account Number</label>
+                    <input
+                      type="text"
+                      value={beneficiaryAccountNumber}
+                      onChange={(event) => setBeneficiaryAccountNumber(event.target.value)}
+                      className={`w-full rounded-3xl border px-4 py-3 ${isLight ? "border-[#D4A574] bg-[#FFF8D2] text-[#111827] placeholder:text-[#B38A2D] focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]" : "border-[#333333] bg-[#121212] text-white placeholder:text-[#6F6F6F] focus:ring-2 focus:ring-white/70 focus:border-white"}`}
+                      placeholder="e.g. 1234567890"
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${isLight ? "text-[#7A5F0D]" : "text-[#D9D9D9]"}`}>Beneficiary Bank Code</label>
+                    <input
+                      type="text"
+                      value={beneficiaryBankCode}
+                      onChange={(event) => setBeneficiaryBankCode(event.target.value)}
+                      className={`w-full rounded-3xl border px-4 py-3 ${isLight ? "border-[#D4A574] bg-[#FFF8D2] text-[#111827] placeholder:text-[#B38A2D] focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]" : "border-[#333333] bg-[#121212] text-white placeholder:text-[#6F6F6F] focus:ring-2 focus:ring-white/70 focus:border-white"}`}
+                      placeholder="e.g. 044"
+                    />
+                  </div>
+                </>
+              )}
+
               <button
                 type="submit"
                 disabled={loading}
                 className={`w-full rounded-3xl px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${isLight ? "bg-[#111827] text-white hover:bg-[#0f172a]" : "bg-[#FFD600] text-[#101010] hover:bg-[#E6C900]"}`}
               >
-                {loading ? "Please wait..." : "Create / Open Wallet"}
+                {loading ? "Please wait..." : mode === "remit" ? "Create / Open Remit Wallet" : "Create / Open Split"}
               </button>
             </form>
           </section>
 
           {wallet && (
             <>
+              <section className={`rounded-[32px] border p-6 shadow-[0_24px_70px_rgba(0,0,0,0.35)] ${isLight ? "border-slate-200 bg-white" : "border-[#222222] bg-[#0D0D0D]"}`}>
+                <div className="flex flex-col gap-4 mb-4">
+                  <div>
+                    <h2 className={`text-xl font-display ${isLight ? "text-slate-900" : "text-white"}`}>{wallet.type === "split" ? "Split Summary" : "Remit Wallet Summary"}</h2>
+                    <p className={`text-sm mt-1 ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>
+                      {wallet.type === "split"
+                        ? "This split collects contributions toward a target amount and can be shared with multiple payers."
+                        : "This remit wallet is a shared family contribution account with a fixed beneficiary."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className={`rounded-3xl border p-4 sm:p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#111111]"}`}>
+                    <p className={`text-sm font-medium ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Mode</p>
+                    <p className={`mt-2 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{wallet.type === "split" ? "Split" : "Remit"}</p>
+                  </div>
+
+                  <div className={`rounded-3xl border p-4 sm:p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
+                    <p className={`text-sm font-medium ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Virtual Account Ref</p>
+                    <p className={`mt-2 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{wallet.account_ref || "-"}</p>
+                  </div>
+
+                  {wallet.type === "split" && (
+                    <>
+                      <div className={`rounded-3xl border p-4 sm:p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
+                        <p className={`text-sm font-medium ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Target Amount</p>
+                        <p className={`mt-2 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{formatCurrency(wallet.target_amount)}</p>
+                      </div>
+
+                      <div className={`rounded-3xl border p-4 sm:p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#111111]"}`}>
+                        <p className={`text-sm font-medium ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Contributors Count</p>
+                        <p className={`mt-2 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{wallet.contributor_count ?? "-"}</p>
+                      </div>
+                    </>
+                  )}
+
+                  {wallet.type !== "split" && wallet.beneficiary_bank_details && (
+                    <>
+                      <div className={`rounded-3xl border p-4 sm:p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
+                        <p className={`text-sm font-medium ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Beneficiary</p>
+                        <p className={`mt-2 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{wallet.beneficiary_bank_details.name}</p>
+                      </div>
+
+                      <div className={`rounded-3xl border p-4 sm:p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#111111]"}`}>
+                        <p className={`text-sm font-medium ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Account</p>
+                        <p className={`mt-2 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{wallet.beneficiary_bank_details.account_number}</p>
+                        {wallet.beneficiary_bank_details.bank_code && (
+                          <p className={`mt-2 text-sm ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Bank code: {wallet.beneficiary_bank_details.bank_code}</p>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {wallet.type === "split" && wallet.account_ref && (
+                    <div className={`rounded-3xl border p-4 sm:p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#111111]"}`}>
+                      <p className={`text-sm font-medium ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Shareable Payment Link</p>
+                      <p className={`mt-2 text-sm ${isLight ? "text-slate-900" : "text-white"}`}>{`${window.location.origin}/pay/${wallet.account_ref}`}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/pay/${wallet.account_ref}`);
+                          setActionMessage("Payment link copied to clipboard.");
+                        }}
+                        className={`mt-4 inline-flex items-center rounded-3xl px-4 py-2 text-sm font-semibold transition ${isLight ? "bg-[#111827] text-white hover:bg-[#0f172a]" : "bg-[#FFD600] text-[#101010] hover:bg-[#E6C900]"}`}
+                      >
+                        Copy Link
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </section>
+
               <section className={`rounded-[32px] border p-6 shadow-[0_24px_70px_rgba(0,0,0,0.35)] ${isLight ? "border-slate-200 bg-white" : "border-[#222222] bg-[#0D0D0D]"}`}>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
                   <div>
@@ -286,7 +444,7 @@ function Dashboard({ theme, toggleTheme }) {
                     </p>
                   </div>
 
-                  {(walletType === "split" || wallet.target_amount != null) && (
+                  {(mode === "split" || wallet.target_amount != null) && (
                     <div className={`rounded-3xl border p-4 sm:p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
                       <p className={`text-sm font-medium ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Target Amount</p>
                       <p className={`mt-2 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>
