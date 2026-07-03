@@ -587,7 +587,7 @@ app.get("/public/split/:accountRef", async (req, res) => {
         accountName: account.accountName || wallet.name,
         expectedAmount: account.expectedAmount ?? String(wallet.target_amount || "0.00"),
         expiryDate: account.expiryDate || null,
-        accountNumber: account.accountNumber || null,
+        accountNumber: account.bankAccountNumber || account.accountNumber || null,
       },
       wallet: {
         id: wallet.id,

@@ -58,12 +58,19 @@ function PaymentLink({ theme }) {
           ) : (
             <div className="mt-6 space-y-4">
               <div className={`rounded-3xl border p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
-                <p className="text-sm uppercase tracking-[0.24em] text-[#FFD600]">Virtual Account</p>
-                <p className={`mt-3 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{accountRef}</p>
-                <p className={`mt-2 text-sm ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>
-                  Send payment to the virtual account below to contribute to the split.
-                </p>
-              </div>
+  <p className="text-sm uppercase tracking-[0.24em] text-[#FFD600]">Virtual Account</p>
+  {account?.accountNumber ? (
+    <p className={`mt-3 text-2xl font-bold tracking-widest ${isLight ? "text-slate-900" : "text-white"}`}>
+      {account.accountNumber}
+    </p>
+  ) : (
+    <p className={`mt-3 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{accountRef}</p>
+  )}
+  <p className={`mt-1 text-sm text-[#FFD600]`}>Nombank MFB</p>
+  <p className={`mt-2 text-sm ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>
+    Send exactly the expected amount to this account number to contribute to the split.
+  </p>
+</div>
 
               <div className={`rounded-3xl border p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
                 <p className="text-sm text-[#A8A8A8]">Expected Amount</p>
