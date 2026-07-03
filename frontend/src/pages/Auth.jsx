@@ -19,6 +19,11 @@ function Auth({ theme, toggleTheme }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [country, setCountry] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
   const navigate = useNavigate();
 
   async function handleSubmit(e) {
@@ -94,6 +99,19 @@ function Auth({ theme, toggleTheme }) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {mode === "signup" && (
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>Full Name</label>
+              <input
+                type="text"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className={`w-full rounded-3xl border px-3 py-2 sm:px-4 sm:py-3 ${isLight ? "border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400" : "border-[#222222] bg-[#090909] text-white placeholder:text-[#5A5A5A]"} focus:outline-none focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]`}
+                placeholder="John Doe"
+              />
+            </div>
+          )}
           <div>
             <label className={`block text-sm font-medium mb-1 ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>Email address</label>
             <input
@@ -105,6 +123,34 @@ function Auth({ theme, toggleTheme }) {
               placeholder="you@example.com"
             />
           </div>
+
+          {mode === "signup" && (
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>Phone Number</label>
+              <input
+                type="tel"
+                required
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                className={`w-full rounded-3xl border px-3 py-2 sm:px-4 sm:py-3 ${isLight ? "border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400" : "border-[#222222] bg-[#090909] text-white placeholder:text-[#5A5A5A]"} focus:outline-none focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]`}
+                placeholder="+234 800 000 0000"
+              />
+            </div>
+          )}
+
+          {mode === "signup" && (
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>Country</label>
+              <input
+                type="text"
+                required
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                className={`w-full rounded-3xl border px-3 py-2 sm:px-4 sm:py-3 ${isLight ? "border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400" : "border-[#222222] bg-[#090909] text-white placeholder:text-[#5A5A5A]"} focus:outline-none focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]`}
+                placeholder="Nigeria"
+              />
+            </div>
+          )}
 
           <div>
             <label className={`block text-sm font-medium mb-1 ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>Password</label>
@@ -118,6 +164,32 @@ function Auth({ theme, toggleTheme }) {
             />
           </div>
 
+          {mode === "signup" && (
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>Confirm Password</label>
+              <input
+                type="password"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className={`w-full rounded-3xl border px-3 py-2 sm:px-4 sm:py-3 ${isLight ? "border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400" : "border-[#222222] bg-[#090909] text-white placeholder:text-[#5A5A5A]"} focus:outline-none focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]`}
+                placeholder="••••••••"
+              />
+            </div>
+          )}
+
+          {mode === "signup" && (
+            <label className={`flex items-start gap-2 text-sm ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>
+              <input
+                type="checkbox"
+                checked={agreeToTerms}
+                onChange={(e) => setAgreeToTerms(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>I agree to the Terms of Service</span>
+            </label>
+          )}
+
           {error && (
             <p className={`rounded-3xl border px-4 py-3 text-sm ${isLight ? "border-slate-200 bg-slate-100 text-slate-900" : "border-[#3D1616] bg-[#380F0F] text-[#FFB3B3]"}`}>
               {error}
@@ -129,7 +201,7 @@ function Auth({ theme, toggleTheme }) {
             disabled={loading}
             className={`w-full rounded-3xl px-4 py-2 sm:px-5 sm:py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${isLight ? "bg-[#111827] text-white hover:bg-[#0f172a]" : "bg-[#FFD600] text-[#101010] hover:bg-[#E6C900]"}`}
           >
-            {loading ? "Please wait..." : mode === "login" ? "Log In" : "Sign Up"}
+            {loading ? "Please wait..." : mode === "login" ? "Log In" : "Create Account"}
           </button>
         </form>
       </div>
