@@ -3,7 +3,7 @@ const axios = require("axios");
 let cachedToken = null;
 let tokenExpiry = null;
 
-const BASE_URL = "https://sandbox.nomba.com";
+const BASE_URL = process.env.NOMBA_BASE_URL || "https://sandbox.nomba.com";
 
 function clearAccessToken() {
   cachedToken = null;
@@ -36,9 +36,10 @@ async function getAccessToken() {
 
     return cachedToken;
   } catch (error) {
-    console.error("Nomba auth error:", error.response?.data || error.message);
+    const detail = error.response?.data?.description || error.response?.data || error.message;
+    console.error("Nomba auth error:", detail);
     clearAccessToken();
-    throw error;
+    throw new Error(`Nomba auth failed: ${detail}`);
   }
 }
 
@@ -179,9 +180,8 @@ async function lookupBankAccount({ accountNumber, bankCode }) {
 }
 
 async function transferToBank({ amount, accountNumber, accountName, bankCode, merchantTxRef, senderName, narration }) {
-  const token = await getAccessToken();
-
-  try {
+  return withTokenRetry(async () => {
+    const token = await getAccessToken();
     const response = await axios.post(
       `${BASE_URL}/v2/transfers/bank`,
       {
@@ -203,10 +203,7 @@ async function transferToBank({ amount, accountNumber, accountName, bankCode, me
     );
 
     return response.data.data;
-  } catch (error) {
-    console.error("Transfer to bank error:", error.response?.data || error.message);
-    throw error;
-  }
+  });
 }
 
 module.exports = {

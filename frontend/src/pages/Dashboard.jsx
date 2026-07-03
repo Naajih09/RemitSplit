@@ -33,10 +33,9 @@ function Dashboard({ theme, toggleTheme }) {
   const [walletName, setWalletName] = useState("");
   const [mode, setMode] = useState("remit");
   const [targetAmount, setTargetAmount] = useState("");
-  const [contributorsCount, setContributorsCount] = useState("");
   const [beneficiaryName, setBeneficiaryName] = useState("");
   const [beneficiaryAccountNumber, setBeneficiaryAccountNumber] = useState("");
-  const [beneficiaryBankCode, setBeneficiaryBankCode] = useState("");
+  const [contributorsCount, setContributorsCount] = useState("");
   const [wallet, setWallet] = useState(null);
   const [contributors, setContributors] = useState([]);
   const [contributorUserId, setContributorUserId] = useState("");
@@ -73,8 +72,9 @@ function Dashboard({ theme, toggleTheme }) {
         if (!targetAmount || Number(targetAmount) <= 0) {
           throw new Error("Target amount is required for split wallets");
         }
-        if (!contributorsCount || Number(contributorsCount) <= 0) {
-          throw new Error("Contributors count is required for split wallets");
+
+        if (contributorsCount && Number(contributorsCount) < 1) {
+          throw new Error("Contributors count must be at least 1");
         }
       }
 
@@ -89,13 +89,11 @@ function Dashboard({ theme, toggleTheme }) {
 
       const body = {
         name: walletName.trim(),
-        type: mode === "split" ? "split" : "wallet",
+        type: mode === "split" ? "split" : "remit",
         target_amount: mode === "split" ? Number(targetAmount) : null,
-        contributor_count: mode === "split" ? Number(contributorsCount) : null,
         beneficiary_bank_details: mode === "remit" ? {
           name: beneficiaryName,
           account_number: beneficiaryAccountNumber,
-          bank_code: beneficiaryBankCode,
         } : null,
       };
 
@@ -104,7 +102,11 @@ function Dashboard({ theme, toggleTheme }) {
         body: JSON.stringify(body),
       });
 
-      setWallet(data.wallet);
+      setWallet({
+        ...data.wallet,
+        virtualAccount: data.virtualAccount || null,
+        plannedContributors: contributorsCount ? Number(contributorsCount) : null,
+      });
       setContributors([]);
       setContributorUserId("");
       setActionMessage("Wallet loaded successfully.");
@@ -318,16 +320,6 @@ function Dashboard({ theme, toggleTheme }) {
                     />
                   </div>
 
-                  <div>
-                    <label className={`block text-sm font-medium mb-1 ${isLight ? "text-[#7A5F0D]" : "text-[#D9D9D9]"}`}>Beneficiary Bank Code</label>
-                    <input
-                      type="text"
-                      value={beneficiaryBankCode}
-                      onChange={(event) => setBeneficiaryBankCode(event.target.value)}
-                      className={`w-full rounded-3xl border px-4 py-3 ${isLight ? "border-[#D4A574] bg-[#FFF8D2] text-[#111827] placeholder:text-[#B38A2D] focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]" : "border-[#333333] bg-[#121212] text-white placeholder:text-[#6F6F6F] focus:ring-2 focus:ring-white/70 focus:border-white"}`}
-                      placeholder="e.g. 044"
-                    />
-                  </div>
                 </>
               )}
 
@@ -367,17 +359,10 @@ function Dashboard({ theme, toggleTheme }) {
                   </div>
 
                   {wallet.type === "split" && (
-                    <>
-                      <div className={`rounded-3xl border p-4 sm:p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
-                        <p className={`text-sm font-medium ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Target Amount</p>
-                        <p className={`mt-2 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{formatCurrency(wallet.target_amount)}</p>
-                      </div>
-
-                      <div className={`rounded-3xl border p-4 sm:p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#111111]"}`}>
-                        <p className={`text-sm font-medium ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Contributors Count</p>
-                        <p className={`mt-2 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{wallet.contributor_count ?? "-"}</p>
-                      </div>
-                    </>
+                    <div className={`rounded-3xl border p-4 sm:p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#111111]"}`}>
+                      <p className={`text-sm font-medium ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Target Amount</p>
+                      <p className={`mt-2 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{formatCurrency(wallet.target_amount)}</p>
+                    </div>
                   )}
 
                   {wallet.type !== "split" && wallet.beneficiary_bank_details && (

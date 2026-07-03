@@ -16,7 +16,10 @@ function PaymentLink({ theme }) {
         if (!response.ok) {
           throw new Error(data.error || "Unable to fetch split payment details");
         }
-        setAccount(data.payment);
+        setAccount({
+          ...data.payment,
+          ...data.wallet,
+        });
       } catch (err) {
         setError(err.message);
       } finally {
@@ -26,6 +29,16 @@ function PaymentLink({ theme }) {
 
     fetchAccount();
   }, [accountRef]);
+
+  function formatCurrency(value) {
+    const amount = Number(value ?? 0);
+    if (Number.isNaN(amount)) return "₦0.00";
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      minimumFractionDigits: 2,
+    }).format(amount);
+  }
 
   return (
     <div className={`min-h-screen ${isLight ? "bg-[#FEF7D2] text-[#111827]" : "bg-[#080808] text-white"}`}>
@@ -54,16 +67,39 @@ function PaymentLink({ theme }) {
 
               <div className={`rounded-3xl border p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
                 <p className="text-sm text-[#A8A8A8]">Expected Amount</p>
-                <p className={`mt-3 text-2xl font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{account.expectedAmount}</p>
+                <p className={`mt-3 text-2xl font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{formatCurrency(account.expectedAmount)}</p>
               </div>
 
               <div className={`rounded-3xl border p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
                 <p className="text-sm text-[#A8A8A8]">Account Name</p>
                 <p className={`mt-3 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{account.accountName}</p>
                 <p className={`mt-2 text-sm ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Account ref: {account.accountRef}</p>
-                {account.expiryDate && (
-                  <p className={`mt-2 text-sm ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Expires: {account.expiryDate}</p>
+                {account.accountNumber && (
+                  <p className={`mt-2 text-sm ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Account number: {account.accountNumber}</p>
                 )}
+                {account.expiryDate && (
+                  <p className={`mt-2 text-sm ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Expires: {new Date(account.expiryDate).toLocaleDateString() ?? account.expiryDate}</p>
+                )}
+              </div>
+
+              <div className={`rounded-3xl border p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
+                <p className="text-sm text-[#A8A8A8]">Split Progress</p>
+                <div className="mt-3 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Collected</span>
+                    <span>{formatCurrency(account.current_balance ?? 0)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Target</span>
+                    <span>{formatCurrency(account.target_amount ?? account.expectedAmount ?? 0)}</span>
+                  </div>
+                  <div className="h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-[#FFD600]"
+                      style={{ width: `${Math.min(100, ((Number(account.current_balance ?? 0) / Number(account.target_amount ?? account.expectedAmount ?? 1)) * 100) || 0)}%` }}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className={`rounded-3xl border p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>

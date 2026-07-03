@@ -205,8 +205,8 @@ app.post("/auth/login", async (req, res) => {
 
 app.post("/wallets", requireAuth, async (req, res) => {
   try {
-    const { name, type, target_amount, contributor_count, beneficiary_bank_details } = req.body;
-    const walletType = type === "split" ? "split" : "wallet";
+    const { name, type, target_amount, beneficiary_bank_details } = req.body;
+    const walletType = type === "split" ? "split" : "remit";
 
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, error: "Wallet name is required" });
@@ -216,13 +216,12 @@ app.post("/wallets", requireAuth, async (req, res) => {
       if (!target_amount || Number(target_amount) <= 0) {
         return res.status(400).json({ success: false, error: "Target amount is required for split wallets" });
       }
-      if (!contributor_count || Number(contributor_count) <= 0) {
-        return res.status(400).json({ success: false, error: "Contributor count is required for split wallets" });
-      }
     }
 
-    if (walletType === "remit" && !beneficiary_bank_details) {
-      return res.status(400).json({ success: false, error: "Beneficiary bank details are required for remit wallets" });
+    if (walletType === "remit") {
+      if (!beneficiary_bank_details || !beneficiary_bank_details.name || !beneficiary_bank_details.account_number) {
+        return res.status(400).json({ success: false, error: "Beneficiary name and account number are required for remit wallets" });
+      }
     }
 
     const { data: existingWallet, error: fetchError } = await supabaseAdmin
@@ -260,6 +259,11 @@ app.post("/wallets", requireAuth, async (req, res) => {
 
     const virtualAccount = await createVirtualAccount(accountPayload);
 
+    const remitBeneficiary = walletType === "remit" ? {
+      name: beneficiary_bank_details.name,
+      account_number: beneficiary_bank_details.account_number,
+    } : null;
+
     const { data: wallet, error: insertError } = await supabaseAdmin
       .from("wallets")
       .insert([
@@ -268,9 +272,8 @@ app.post("/wallets", requireAuth, async (req, res) => {
           name,
           type: walletType,
           target_amount: walletType === "split" ? Number(target_amount) : null,
-          contributor_count: walletType === "split" ? Number(contributor_count) : null,
           current_balance: 0,
-          beneficiary_bank_details: walletType === "remit" ? beneficiary_bank_details : null,
+          beneficiary_bank_details: remitBeneficiary,
           status: "active",
           user_id: req.userId
         }
@@ -563,7 +566,7 @@ app.get("/public/split/:accountRef", async (req, res) => {
     const accountRef = req.params.accountRef;
     const { data: wallet, error: walletError } = await supabaseAdmin
       .from("wallets")
-      .select("id, name, type, target_amount, contributor_count, current_balance, status")
+      .select("id, name, type, target_amount, current_balance, status")
       .eq("account_ref", accountRef)
       .single();
 
@@ -601,6 +604,8 @@ app.get("/public/split/:accountRef", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+const nombaMode = process.env.NOMBA_BASE_URL === "https://api.nomba.com" ? "live" : "sandbox";
+console.log(`Using Nomba base URL: ${process.env.NOMBA_BASE_URL || "https://sandbox.nomba.com"} (${nombaMode})`);
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
