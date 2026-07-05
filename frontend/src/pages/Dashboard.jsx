@@ -2,13 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../lib/api";
 
-function WovenDivider({ className = "" }) {
+function LoadingSpinner() {
   return (
-    <div className={`inline-flex items-center ${className}`}>
-      <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#FFD600] -mr-2.5" />
-      <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#FFD600]/50 -mr-2.5" />
-      <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#FFD600]/30" />
-    </div>
+    <span className="inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
   );
 }
 
@@ -23,12 +19,11 @@ function formatCurrency(value) {
 }
 
 const statusStyles = {
-  active: "bg-white/10 text-white",
-  completed: "bg-[#FFD600]/20 text-[#FFD600]",
+  active: "bg-[#00C896]/15 text-[#00C896]",
+  completed: "bg-[#FFD600]/15 text-[#FFD600]",
 };
 
-function Dashboard({ theme, toggleTheme }) {
-  const isLight = theme === "light";
+function Dashboard() {
   const navigate = useNavigate();
 
   // Wallet creation state
@@ -38,22 +33,32 @@ function Dashboard({ theme, toggleTheme }) {
   const [beneficiaryName, setBeneficiaryName] = useState("");
   const [beneficiaryAccountNumber, setBeneficiaryAccountNumber] = useState("");
   const [contributorsCount, setContributorsCount] = useState("");
+  const [organizerAccountName, setOrganizerAccountName] = useState("");
+  const [organizerAccountNumber, setOrganizerAccountNumber] = useState("");
+  const [organizerBankCode, setOrganizerBankCode] = useState("");
 
   // Wallet display state
   const [wallet, setWallet] = useState(null);
   const [contributors, setContributors] = useState([]);
   const [contributorUserId, setContributorUserId] = useState("");
+  const [transactions, setTransactions] = useState([]);
 
   // FX Quote state
   const [quoteAmount, setQuoteAmount] = useState("");
   const [quoteCurrency, setQuoteCurrency] = useState("GBP");
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawAccountName, setWithdrawAccountName] = useState("");
+  const [withdrawAccountNumber, setWithdrawAccountNumber] = useState("");
+  const [withdrawBankCode, setWithdrawBankCode] = useState("");
 
   // Loading/feedback state
   const [loading, setLoading] = useState(false);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [contributorsLoading, setContributorsLoading] = useState(false);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -84,6 +89,8 @@ function Dashboard({ theme, toggleTheme }) {
           throw new Error("Target amount is required for split wallets");
         if (contributorsCount && Number(contributorsCount) < 1)
           throw new Error("Contributors count must be at least 1");
+        if (!organizerAccountName.trim() || !organizerAccountNumber.trim() || !organizerBankCode.trim())
+          throw new Error("Organizer payout account name, account number, and bank code are required");
       }
 
       if (mode === "remit") {
@@ -97,9 +104,18 @@ function Dashboard({ theme, toggleTheme }) {
         name: walletName.trim(),
         type: mode === "split" ? "split" : "wallet",
         target_amount: mode === "split" ? Number(targetAmount) : null,
+        contributors_count: mode === "split" ? Number(contributorsCount || 1) : null,
         beneficiary_bank_details:
           mode === "remit"
             ? { name: beneficiaryName, account_number: beneficiaryAccountNumber }
+            : null,
+        organizer_bank_details:
+          mode === "split"
+            ? {
+                accountName: organizerAccountName,
+                accountNumber: organizerAccountNumber,
+                bankCode: organizerBankCode,
+              }
             : null,
       };
 
@@ -115,6 +131,7 @@ function Dashboard({ theme, toggleTheme }) {
       });
       setContributors([]);
       setContributorUserId("");
+      setTransactions([]);
       setActionMessage(data.reused ? "Existing wallet loaded." : "Wallet created successfully.");
     } catch (err) {
       setError(err.message);
@@ -200,424 +217,612 @@ function Dashboard({ theme, toggleTheme }) {
     }
   };
 
-  const cardClass = `rounded-[32px] border p-6 shadow-[0_24px_70px_rgba(0,0,0,0.35)] ${
-    isLight ? "border-[#D4A574] bg-[#FFF7D0]" : "border-[#222222] bg-[#111111]"
-  }`;
+  const handleWithdraw = async (event) => {
+    event.preventDefault();
+    if (!wallet?.name) return;
+    setError("");
+    setActionMessage("");
+    setWithdrawLoading(true);
+    try {
+      if (!withdrawAmount || Number(withdrawAmount) <= 0)
+        throw new Error("Withdrawal amount is required");
+      if (!withdrawAccountName.trim() || !withdrawAccountNumber.trim() || !withdrawBankCode.trim())
+        throw new Error("Withdrawal account name, account number, and bank code are required");
 
-  const inputClass = `w-full rounded-3xl border px-4 py-3 outline-none transition ${
-    isLight
-      ? "border-[#D4A574] bg-[#FFF8D2] text-[#111827] placeholder:text-[#B38A2D] focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]"
-      : "border-[#333333] bg-[#121212] text-white placeholder:text-[#6F6F6F] focus:ring-2 focus:ring-white/20 focus:border-white/40"
-  }`;
+      const data = await apiRequest("/withdraw", {
+        method: "POST",
+        body: JSON.stringify({
+          walletName: wallet.name,
+          amount: Number(withdrawAmount),
+          accountName: withdrawAccountName.trim(),
+          accountNumber: withdrawAccountNumber.trim(),
+          bankCode: withdrawBankCode.trim(),
+        }),
+      });
 
-  const labelClass = `block text-sm font-medium mb-1 ${
-    isLight ? "text-[#7A5F0D]" : "text-[#D9D9D9]"
-  }`;
+      setWallet((current) => ({ ...current, current_balance: data.newBalance }));
+      setWithdrawAmount("");
+      setActionMessage("Withdrawal requested successfully.");
+      handleLoadTransactions();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setWithdrawLoading(false);
+    }
+  };
 
-  const primaryBtn = `rounded-3xl px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-    isLight
-      ? "bg-[#111827] text-white hover:bg-[#0f172a]"
-      : "bg-[#FFD600] text-[#101010] hover:bg-[#E6C900]"
-  }`;
+  const handleLoadTransactions = async () => {
+    if (!wallet?.id) return;
+    setError("");
+    setTransactionsLoading(true);
+    try {
+      const data = await apiRequest(`/wallets/${wallet.id}/transactions`);
+      setTransactions(data.transactions || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setTransactionsLoading(false);
+    }
+  };
 
-  const secondaryBtn = `rounded-3xl px-4 py-2 font-medium transition disabled:opacity-60 ${
-    isLight
-      ? "bg-slate-900 text-white hover:bg-slate-800"
-      : "bg-white text-[#101010] hover:bg-[#F0F0F0]"
-  }`;
-
-  const miniCardClass = `rounded-3xl border p-4 sm:p-5 ${
-    isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"
-  }`;
-
-  const labelMuted = `text-sm font-medium ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`;
-  const valueBold = `mt-2 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`;
+  const inputClass =
+    "w-full rounded-2xl border border-[#222222] bg-[#1A1A1A] px-4 py-3.5 text-white outline-none transition placeholder:text-[#444444] focus:border-[#FFD600] focus:ring-0";
+  const labelClass =
+    "mb-2 block text-xs font-bold uppercase tracking-[0.22em] text-[#A0A0A0]";
+  const primaryBtn =
+    "inline-flex items-center justify-center gap-3 rounded-2xl bg-[#FFD600] px-5 py-4 text-sm font-black text-[#0A0A0A] transition hover:bg-[#E6C900] disabled:cursor-not-allowed disabled:opacity-70";
+  const secondaryBtn =
+    "inline-flex items-center justify-center gap-2 rounded-xl border border-[#333333] px-4 py-2 text-sm font-bold text-[#A0A0A0] transition hover:border-white hover:text-white disabled:cursor-not-allowed disabled:opacity-60";
+  const outlineYellowBtn =
+    "inline-flex items-center justify-center gap-2 rounded-xl border border-[#FFD600] px-4 py-3 text-sm font-bold text-[#FFD600] transition hover:bg-[#FFD600] hover:text-[#0A0A0A] disabled:cursor-not-allowed disabled:opacity-60";
+  const progressPercent = wallet
+    ? Math.min(
+        100,
+        ((Number(wallet.current_balance ?? 0) / Number(wallet.target_amount ?? 1)) * 100) || 0,
+      )
+    : 0;
+  const shareableLink =
+    wallet?.type === "split" && wallet?.account_ref
+      ? `${window.location.origin}/pay/${wallet.account_ref}`
+      : "";
 
   return (
-    <div className={`min-h-screen ${isLight ? "bg-[#FEF7D2] text-[#111827]" : "bg-[#080808] text-white"}`}>
-      <div className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8">
-
-        {/* Header */}
-        <header className={`mb-6 flex flex-col gap-2 rounded-[28px] border p-4 sm:p-5 sm:flex-row sm:items-center sm:justify-between ${
-          isLight
-            ? "border-[#D4A574] bg-[#FFF7D0] shadow-[0_20px_50px_rgba(255,214,0,0.12)]"
-            : "border-[#232323] bg-[#0D0D0D] shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
-        }`}>
-          <div>
-            <p className={`text-sm uppercase tracking-[0.24em] ${isLight ? "text-[#8C7135]" : "text-[#B8B8B8]"}`}>RemitSplit</p>
-            <h1 className={`mt-1 text-3xl sm:text-4xl font-display font-semibold ${isLight ? "text-[#111827]" : "text-white"}`}>
-              Your Contribution Wallet
-            </h1>
+    <div className="min-h-screen bg-[#0A0A0A] text-white">
+      <header className="sticky top-0 z-20 border-b border-[#1A1A1A] bg-[#0A0A0A]/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-4 sm:px-6 md:flex-row md:items-center md:justify-between">
+          <div className="font-display text-2xl font-semibold tracking-tight">
+            RemitSplit<span className="text-[#FFD600]">.</span>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+
+          <div className="flex w-full rounded-full border border-[#222222] bg-[#111111] p-1 md:w-auto">
+            {["remit", "split"].map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className={`flex-1 rounded-full px-6 py-2 text-sm font-black transition md:flex-none ${
+                  mode === m
+                    ? "bg-[#FFD600] text-[#0A0A0A]"
+                    : "text-[#A0A0A0] hover:text-white"
+                }`}
+              >
+                {m.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={toggleTheme}
-              aria-label={isLight ? "Switch to dark mode" : "Switch to light mode"}
-              className={`rounded-full border p-2 sm:p-3 text-lg transition ${
-                isLight
-                  ? "border-[#D4A574] bg-[#FFF3A7] text-[#111827] hover:bg-[#FFE77E]"
-                  : "border-[#FFD600] bg-[#111111] text-[#FFD600] hover:bg-[#1E1E1E]"
-              }`}
+              aria-label="Dark mode enabled"
+              className="grid h-10 w-10 place-items-center rounded-full border border-[#333333] text-[#FFD600]"
             >
-              {isLight ? "🌙" : "☀️"}
+              ●
             </button>
             <button
               onClick={handleLogout}
-              className={`rounded-3xl border px-4 py-2 sm:px-5 sm:py-3 text-sm font-semibold transition ${
-                isLight
-                  ? "border-[#D4A574] bg-[#FFF3A7] text-[#111827] hover:bg-[#FFE77E]"
-                  : "border-[#333333] bg-transparent text-[#F5F5F5] hover:bg-[#111111] hover:text-[#FFD600]"
-              }`}
+              className="rounded-full border border-[#333333] px-4 py-2 text-sm font-bold text-[#A0A0A0] transition hover:border-white hover:text-white"
             >
               Log Out
             </button>
           </div>
-        </header>
+        </div>
+      </header>
 
-        <main className="space-y-6">
+      <main className="mx-auto max-w-[800px] space-y-6 px-5 py-6 sm:px-6">
+        <section className="rounded-[32px] border border-[#222222] bg-[#111111] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.35)] sm:p-7">
+          <p className="text-xs font-black uppercase tracking-[0.26em] text-[#A0A0A0]">
+            New Wallet
+          </p>
+          <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+            Create or open a wallet
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-[#A0A0A0]">
+            {mode === "remit"
+              ? "Build a shared family remittance wallet with a beneficiary ready for settlement."
+              : "Create a focused collection link for friends, family, or community contributors."}
+          </p>
 
-          {/* Create / Open Wallet */}
-          <section className={cardClass}>
-            <div className="mb-4">
-              <p className={`text-sm uppercase tracking-[0.3em] ${isLight ? "text-[#8C7135]" : "text-[#A0A8A0]"}`}>Wallet Control</p>
-              <h2 className={`mt-2 text-2xl font-display font-semibold ${isLight ? "text-[#111827]" : "text-white"}`}>
-                Create or find a wallet
-              </h2>
-              <p className={`mt-2 text-sm leading-6 ${isLight ? "text-[#7A5F0D]" : "text-[#C0C0C0]"}`}>
-                {mode === "remit"
-                  ? "Create a shared family wallet for regular diaspora contributions, or open an existing one."
-                  : "Create a one-off split collection with a target amount and contributor count."}
-              </p>
+          {(error || actionMessage) && (
+            <div className="mt-5 space-y-3">
+              {error && (
+                <div className="rounded-xl border border-[#FF4444]/30 bg-[#FF4444]/10 px-4 py-3 text-sm text-[#FF4444]">
+                  {error}
+                </div>
+              )}
+              {actionMessage && (
+                <div className="rounded-xl border border-[#00C896]/25 bg-[#00C896]/10 px-4 py-3 text-sm text-[#00C896]">
+                  {actionMessage}
+                </div>
+              )}
+            </div>
+          )}
+
+          <form onSubmit={handleCreateOrOpenWallet} className="mt-6 grid gap-5">
+            <div>
+              <label className={labelClass}>Wallet Name</label>
+              <input
+                type="text"
+                value={walletName}
+                onChange={(e) => setWalletName(e.target.value)}
+                className={inputClass}
+                placeholder={mode === "remit" ? "e.g. Mama's Support Fund" : "e.g. Eid Contribution"}
+              />
             </div>
 
-            {error && (
-              <div className={`mb-4 rounded-3xl border px-4 py-3 text-sm ${
-                isLight ? "border-[#D4A574] bg-[#FFF4B8] text-[#111827]" : "border-[#3D1212] bg-[#300B0B] text-[#FFB3B3]"
-              }`}>{error}</div>
-            )}
+            <div className="rounded-3xl border border-[#222222] bg-[#0A0A0A] p-4 text-sm leading-6 text-[#A0A0A0]">
+              <span className="font-bold text-white">
+                {mode === "remit" ? "Remit Mode" : "Split Mode"}:
+              </span>{" "}
+              {mode === "remit"
+                ? "Family wallet with locked rates and a fixed beneficiary."
+                : "One-off group collection with a target and shareable payment link."}
+            </div>
 
-            {actionMessage && (
-              <div className={`mb-4 rounded-3xl border px-4 py-3 text-sm ${
-                isLight ? "border-[#D4A574] bg-[#FFF4B8] text-[#111827]" : "border-white/10 bg-white/5 text-white"
-              }`}>{actionMessage}</div>
-            )}
-
-            <form onSubmit={handleCreateOrOpenWallet} className="grid gap-4">
-              <div>
-                <label className={labelClass}>Wallet Name</label>
-                <input
-                  type="text"
-                  value={walletName}
-                  onChange={(e) => setWalletName(e.target.value)}
-                  className={inputClass}
-                  placeholder={mode === "remit" ? "e.g. Mama's Support Fund" : "e.g. Eid Contribution"}
-                />
-              </div>
-
-              {/* Mode toggle */}
-              <div className="flex flex-wrap gap-2">
-                {["remit", "split"].map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMode(m)}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                      mode === m
-                        ? isLight ? "bg-[#111827] text-white" : "bg-[#FFD600] text-[#101010]"
-                        : isLight ? "bg-[#FFF3A7] text-[#7A5F0D] hover:bg-[#FFE77E]" : "bg-[#111111] text-[#FFD600] hover:bg-[#1E1E1E]"
-                    }`}
-                  >
-                    {m === "remit" ? "Remit Mode" : "Split Mode"}
-                  </button>
-                ))}
-              </div>
-
-              <div className={`rounded-3xl border p-4 ${isLight ? "border-[#D4A574] bg-[#FFF8D2]" : "border-[#333333] bg-[#0D0D0D]"}`}>
-                <p className="text-sm font-semibold">
-                  {mode === "remit"
-                    ? "Remit Mode: Family wallet with a fixed beneficiary"
-                    : "Split Mode: One-off group collection with a target amount"}
-                </p>
-              </div>
-
-              {mode === "split" && (
-                <>
+            {mode === "split" && (
+              <>
+                <div className="grid gap-5 sm:grid-cols-2">
                   <div>
                     <label className={labelClass}>Target Amount (₦)</label>
-                    <input type="number" min="0" step="0.01" value={targetAmount}
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={targetAmount}
                       onChange={(e) => setTargetAmount(e.target.value)}
-                      className={inputClass} placeholder="e.g. 50000" />
+                      className={inputClass}
+                      placeholder="e.g. 50000"
+                    />
                   </div>
                   <div>
                     <label className={labelClass}>Contributors Count</label>
-                    <input type="number" min="1" value={contributorsCount}
+                    <input
+                      type="number"
+                      min="1"
+                      value={contributorsCount}
                       onChange={(e) => setContributorsCount(e.target.value)}
-                      className={inputClass} placeholder="e.g. 5" />
+                      className={inputClass}
+                      placeholder="e.g. 5"
+                    />
                   </div>
-                </>
-              )}
+                </div>
 
-              {mode === "remit" && (
-                <>
-                  <div>
-                    <label className={labelClass}>Beneficiary Name</label>
-                    <input type="text" value={beneficiaryName}
-                      onChange={(e) => setBeneficiaryName(e.target.value)}
-                      className={inputClass} placeholder="e.g. Mama Aisha" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Beneficiary Account Number</label>
-                    <input type="text" value={beneficiaryAccountNumber}
-                      onChange={(e) => setBeneficiaryAccountNumber(e.target.value)}
-                      className={inputClass} placeholder="e.g. 1234567890" />
-                  </div>
-                </>
-              )}
-
-              <button type="submit" disabled={loading} className={`w-full ${primaryBtn}`}>
-                {loading ? "Please wait..." : mode === "remit" ? "Create / Open Remit Wallet" : "Create / Open Split"}
-              </button>
-            </form>
-          </section>
-
-          {wallet && (
-            <>
-              {/* Wallet Summary */}
-              <section className={cardClass}>
-                <div className="mb-4">
-                  <h2 className={`text-xl font-display ${isLight ? "text-[#111827]" : "text-white"}`}>
-                    {wallet.type === "split" ? "Split Summary" : "Remit Wallet Summary"}
-                  </h2>
-                  <p className={`text-sm mt-1 ${isLight ? "text-[#7A5F0D]" : "text-[#A8A8A8]"}`}>
-                    {wallet.type === "split"
-                      ? "This split collects contributions toward a target amount and can be shared with multiple payers."
-                      : "This remit wallet is a shared family contribution account with a fixed beneficiary."}
+                <div className="rounded-3xl border border-[#222222] bg-[#0A0A0A] p-4">
+                  <p className="mb-4 text-xs font-black uppercase tracking-[0.22em] text-[#FFD600]">
+                    Organizer Payout Account
                   </p>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className={miniCardClass}>
-                    <p className={labelMuted}>Mode</p>
-                    <p className={valueBold}>{wallet.type === "split" ? "Split" : "Remit"}</p>
-                  </div>
-                  <div className={miniCardClass}>
-                    <p className={labelMuted}>Virtual Account Ref</p>
-                    <p className={valueBold}>{wallet.account_ref || "-"}</p>
-                  </div>
-                  {wallet.type === "split" && (
-                    <div className={miniCardClass}>
-                      <p className={labelMuted}>Target Amount</p>
-                      <p className={valueBold}>{formatCurrency(wallet.target_amount)}</p>
-                    </div>
-                  )}
-                  {wallet.type !== "split" && wallet.beneficiary_bank_details && (
-                    <>
-                      <div className={miniCardClass}>
-                        <p className={labelMuted}>Beneficiary</p>
-                        <p className={valueBold}>{wallet.beneficiary_bank_details.name}</p>
-                      </div>
-                      <div className={miniCardClass}>
-                        <p className={labelMuted}>Account Number</p>
-                        <p className={valueBold}>{wallet.beneficiary_bank_details.account_number}</p>
-                      </div>
-                    </>
-                  )}
-                  {wallet.type === "split" && wallet.account_ref && (
-                    <div className={`${miniCardClass} sm:col-span-2`}>
-                      <p className={labelMuted}>Shareable Payment Link</p>
-                      <p className={`mt-2 text-sm break-all ${isLight ? "text-slate-900" : "text-white"}`}>
-                        {`${window.location.origin}/pay/${wallet.account_ref}`}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(`${window.location.origin}/pay/${wallet.account_ref}`);
-                          setActionMessage("Payment link copied to clipboard.");
-                        }}
-                        className={`mt-3 ${primaryBtn}`}
-                      >
-                        Copy Link
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              {/* FX Quote — only for remit wallets */}
-              {wallet.type !== "split" && (
-                <section className={cardClass}>
-                  <div className="mb-4">
-                    <p className={`text-sm uppercase tracking-[0.3em] ${isLight ? "text-[#8C7135]" : "text-[#A0A8A0]"}`}>REMIT MODE</p>
-                    <h2 className={`mt-2 text-2xl font-display font-semibold ${isLight ? "text-[#111827]" : "text-white"}`}>
-                      Send a Contribution
-                    </h2>
-                    <p className={`mt-2 text-sm ${isLight ? "text-[#7A5F0D]" : "text-[#A8A8A8]"}`}>
-                      Lock today's exchange rate before sending funds to this wallet.
-                    </p>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="grid gap-5 sm:grid-cols-3">
                     <div>
-                      <label className={labelClass}>Amount</label>
+                      <label className={labelClass}>Account Name</label>
                       <input
-                        type="number"
-                        min="1"
-                        value={quoteAmount}
-                        onChange={(e) => setQuoteAmount(e.target.value)}
+                        type="text"
+                        value={organizerAccountName}
+                        onChange={(e) => setOrganizerAccountName(e.target.value)}
                         className={inputClass}
-                        placeholder="e.g. 100"
+                        placeholder="e.g. Aisha Bello"
                       />
                     </div>
                     <div>
-                      <label className={labelClass}>Currency</label>
-                      <select
-                        value={quoteCurrency}
-                        onChange={(e) => setQuoteCurrency(e.target.value)}
+                      <label className={labelClass}>Account Number</label>
+                      <input
+                        type="text"
+                        value={organizerAccountNumber}
+                        onChange={(e) => setOrganizerAccountNumber(e.target.value)}
                         className={inputClass}
-                      >
-                        <option value="GBP">GBP — British Pound</option>
-                        <option value="EUR">EUR — Euro</option>
-                        <option value="CAD">CAD — Canadian Dollar</option>
-                        <option value="USD">USD — US Dollar</option>
-                      </select>
+                        placeholder="e.g. 1234567890"
+                      />
                     </div>
-                    <div className="flex items-end">
-                      <button
-                        type="button"
-                        disabled={quoteLoading || !quoteAmount}
-                        onClick={handleGetQuote}
-                        className={`w-full ${primaryBtn}`}
-                      >
-                        {quoteLoading ? "Fetching rate..." : "Get Quote"}
-                      </button>
+                    <div>
+                      <label className={labelClass}>Bank Code</label>
+                      <input
+                        type="text"
+                        value={organizerBankCode}
+                        onChange={(e) => setOrganizerBankCode(e.target.value)}
+                        className={inputClass}
+                        placeholder="e.g. 044"
+                      />
                     </div>
                   </div>
-
-                  {quote && (
-                    <div className={`mt-5 rounded-3xl border p-5 ${
-                      isLight ? "border-[#D4A574] bg-white" : "border-[#FFD600]/30 bg-[#0D0D0D]"
-                    }`}>
-                      <p className={`text-xs uppercase tracking-widest ${isLight ? "text-[#8C7135]" : "text-[#FFD600]"}`}>
-                        Rate locked — valid for 5 minutes
-                      </p>
-                      <p className={`mt-3 text-3xl font-bold ${isLight ? "text-[#111827]" : "text-white"}`}>
-                        {quoteCurrency} {quoteAmount} → {formatCurrency(quote.toAmount)}
-                      </p>
-                      <div className={`mt-3 flex flex-wrap gap-4 text-sm ${isLight ? "text-[#7A5F0D]" : "text-[#A8A8A8]"}`}>
-                        <span>Rate: 1 {quoteCurrency} = ₦{Number(quote.toAmount / quoteAmount).toLocaleString()}</span>
-                        <span>Fee: {quote.feeExpression}</span>
-                        <span className={`text-xs ${isLight ? "text-[#B38A2D]" : "text-[#666666]"}`}>
-                          Rate ID: {quote.exchangeRateId}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </section>
-              )}
-
-              {/* Wallet Balance */}
-              <section className={cardClass}>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                  <div>
-                    <h2 className={`text-xl font-display ${isLight ? "text-[#111827]" : "text-white"}`}>Wallet Balance</h2>
-                    <p className={`text-sm mt-1 ${isLight ? "text-[#7A5F0D]" : "text-[#A8A8A8]"}`}>
-                      Review the current balance and status.
-                    </p>
-                  </div>
-                  <button onClick={handleRefreshBalance} disabled={balanceLoading} className={secondaryBtn}>
-                    {balanceLoading ? "Refreshing..." : "Refresh Balance"}
-                  </button>
                 </div>
+              </>
+            )}
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className={miniCardClass}>
-                    <p className={labelMuted}>Wallet Name</p>
-                    <p className={valueBold}>{wallet.name}</p>
-                  </div>
-                  <div className={miniCardClass}>
-                    <p className={labelMuted}>Current Balance</p>
-                    <p className={valueBold}>{formatCurrency(wallet.current_balance)}</p>
-                  </div>
-                  {wallet.target_amount != null && (
-                    <div className={miniCardClass}>
-                      <p className={labelMuted}>Target Amount</p>
-                      <p className={valueBold}>{formatCurrency(wallet.target_amount)}</p>
-                    </div>
-                  )}
-                  <div className={miniCardClass}>
-                    <p className={labelMuted}>Status</p>
-                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${
-                      isLight ? "bg-slate-100 text-slate-900" : statusStyles[wallet.status] ?? "bg-[#2A2A2A] text-[#E0E0E0]"
-                    }`}>
+            {mode === "remit" && (
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                  <label className={labelClass}>Beneficiary Name</label>
+                  <input
+                    type="text"
+                    value={beneficiaryName}
+                    onChange={(e) => setBeneficiaryName(e.target.value)}
+                    className={inputClass}
+                    placeholder="e.g. Mama Aisha"
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Beneficiary Account Number</label>
+                  <input
+                    type="text"
+                    value={beneficiaryAccountNumber}
+                    onChange={(e) => setBeneficiaryAccountNumber(e.target.value)}
+                    className={inputClass}
+                    placeholder="e.g. 1234567890"
+                  />
+                </div>
+              </div>
+            )}
+
+            <button type="submit" disabled={loading} className={primaryBtn}>
+              {loading && <LoadingSpinner />}
+              {loading
+                ? "Please wait..."
+                : mode === "remit"
+                  ? "Create / Open Remit Wallet"
+                  : "Create / Open Split"}
+            </button>
+          </form>
+        </section>
+
+        {wallet && (
+          <>
+            <section className="rounded-[32px] border border-[#FFD600]/20 bg-gradient-to-br from-[#111111] to-[#141414] p-6 shadow-[0_28px_90px_rgba(0,0,0,0.45)] sm:p-7">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.26em] text-[#FFD600]">
+                    Active Wallet
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <h2 className="font-display text-3xl font-semibold tracking-tight text-white">
+                      {wallet.name}
+                    </h2>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.14em] ${
+                        statusStyles[wallet.status] ?? "bg-white/10 text-white"
+                      }`}
+                    >
                       {wallet.status ?? "unknown"}
                     </span>
                   </div>
                 </div>
-              </section>
 
-              {/* Contributors */}
-              <section className={cardClass}>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                  <div className="flex items-center gap-3">
-                    <WovenDivider />
-                    <div>
-                      <h2 className={`text-xl font-display ${isLight ? "text-[#111827]" : "text-white"}`}>Contributors</h2>
-                      <p className={`text-sm mt-1 ${isLight ? "text-[#7A5F0D]" : "text-[#A8A8A8]"}`}>
-                        Manage who can contribute to this wallet.
-                      </p>
-                    </div>
-                  </div>
-                  <button onClick={handleLoadContributors} disabled={contributorsLoading} className={secondaryBtn}>
-                    {contributorsLoading ? "Loading..." : "Load Contributors"}
-                  </button>
+                <button onClick={handleRefreshBalance} disabled={balanceLoading} className={secondaryBtn}>
+                  {balanceLoading && <LoadingSpinner />}
+                  {balanceLoading ? "Refreshing..." : "Refresh Balance"}
+                </button>
+              </div>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-3xl border border-[#222222] bg-[#0A0A0A] p-5">
+                  <p className="text-sm font-medium text-[#A0A0A0]">Current Balance</p>
+                  <p className="mt-3 font-display text-3xl font-semibold text-white">
+                    {formatCurrency(wallet.current_balance)}
+                  </p>
                 </div>
 
-                {contributors.length > 0 ? (
-                  <div className="space-y-3 mb-6">
-                    {contributors.map((contributor) => (
-                      <div
-                        key={contributor.id ?? `${contributor.user_id}-${contributor.created_at}`}
-                        className={miniCardClass}
-                      >
-                        <p className={labelMuted}>User ID</p>
-                        <p className={`mt-1 text-sm break-all ${isLight ? "text-slate-900" : "text-white"}`}>
-                          {contributor.user_id}
-                        </p>
-                        <p className={`text-xs mt-2 ${isLight ? "text-slate-500" : "text-[#A0A0A0]"}`}>
-                          Added on {new Date(contributor.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    ))}
+                {wallet.type === "split" ? (
+                  <div className="rounded-3xl border border-[#222222] bg-[#0A0A0A] p-5">
+                    <p className="text-sm font-medium text-[#A0A0A0]">Target Amount</p>
+                    <p className="mt-3 font-display text-3xl font-semibold text-white">
+                      {formatCurrency(wallet.target_amount)}
+                    </p>
                   </div>
                 ) : (
-                  <p className={`text-sm mb-6 ${isLight ? "text-[#7A5F0D]" : "text-[#A8A8A8]"}`}>
+                  <div className="rounded-3xl border border-[#222222] bg-[#0A0A0A] p-5">
+                    <p className="text-sm font-medium text-[#A0A0A0]">Beneficiary</p>
+                    <p className="mt-3 text-lg font-bold text-white">
+                      {wallet.beneficiary_bank_details?.name ?? "-"}
+                    </p>
+                    <p className="mt-2 text-sm text-[#A0A0A0]">
+                      {wallet.beneficiary_bank_details?.account_number ?? wallet.account_ref ?? "-"}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {wallet.type === "split" && (
+                <div className="mt-6 space-y-5">
+                  <div>
+                    <div className="mb-2 flex justify-between text-sm text-[#A0A0A0]">
+                      <span>Split progress</span>
+                      <span>{Math.round(progressPercent)}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-[#222222]">
+                      <div
+                        className="h-2 rounded-full bg-[#FFD600]"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {shareableLink && (
+                    <div>
+                      <p className={labelClass}>Shareable Link</p>
+                      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                        <div className="min-w-0 rounded-xl border border-[#333333] bg-[#0A0A0A] px-4 py-3 font-mono text-sm text-[#A0A0A0]">
+                          <p className="truncate">{shareableLink}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(shareableLink);
+                            setActionMessage("Payment link copied to clipboard.");
+                          }}
+                          className={outlineYellowBtn}
+                        >
+                          Copy Link
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {wallet.type !== "split" && (
+              <section className="rounded-[32px] border border-[#222222] bg-[#111111] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.35)] sm:p-7">
+                <p className="text-xs font-black uppercase tracking-[0.26em] text-[#FFD600]">
+                  Send A Contribution
+                </p>
+                <h2 className="mt-3 font-display text-3xl font-semibold tracking-tight text-white">
+                  Get today's rate
+                </h2>
+
+                <div className="mt-6 grid gap-4 sm:grid-cols-[1fr_1fr_auto]">
+                  <div>
+                    <label className={labelClass}>Amount</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={quoteAmount}
+                      onChange={(e) => setQuoteAmount(e.target.value)}
+                      className={inputClass}
+                      placeholder="e.g. 100"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Currency</label>
+                    <select
+                      value={quoteCurrency}
+                      onChange={(e) => setQuoteCurrency(e.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="GBP">GBP</option>
+                      <option value="EUR">EUR</option>
+                      <option value="CAD">CAD</option>
+                      <option value="USD">USD</option>
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      disabled={quoteLoading || !quoteAmount}
+                      onClick={handleGetQuote}
+                      className={`${primaryBtn} w-full sm:w-auto`}
+                    >
+                      {quoteLoading && <LoadingSpinner />}
+                      {quoteLoading ? "Fetching..." : "Get Quote"}
+                    </button>
+                  </div>
+                </div>
+
+                {quote && (
+                  <div className="mt-6 rounded-2xl border border-[#FFD600]/30 bg-[#0A0A0A] p-5">
+                    <p className="font-display text-4xl font-semibold leading-tight text-white sm:text-5xl">
+                      {quoteCurrency} {quoteAmount} → {formatCurrency(quote.toAmount)}
+                    </p>
+                    <p className="mt-4 text-sm text-[#A0A0A0]">
+                      1 {quoteCurrency} = ₦
+                      {Number(quote.toAmount / quoteAmount).toLocaleString()} · Fee:{" "}
+                      {quote.feeExpression} · Rate locked 5 min
+                    </p>
+                    <p className="mt-3 text-xs text-[#555555]">
+                      Rate ID: {quote.exchangeRateId}
+                    </p>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {wallet.type !== "split" && (
+              <section className="rounded-[32px] border border-[#222222] bg-[#111111] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.35)] sm:p-7">
+                <p className="text-xs font-black uppercase tracking-[0.26em] text-[#FFD600]">
+                  Beneficiary Withdrawal
+                </p>
+                <h2 className="mt-3 font-display text-3xl font-semibold tracking-tight text-white">
+                  Send funds home
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-[#A0A0A0]">
+                  Withdraw from the current wallet balance after Nomba verifies the beneficiary account.
+                </p>
+
+                <form onSubmit={handleWithdraw} className="mt-6 grid gap-5">
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <div>
+                      <label className={labelClass}>Amount (₦)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={withdrawAmount}
+                        onChange={(e) => setWithdrawAmount(e.target.value)}
+                        className={inputClass}
+                        placeholder="e.g. 25000"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Bank Code</label>
+                      <input
+                        type="text"
+                        value={withdrawBankCode}
+                        onChange={(e) => setWithdrawBankCode(e.target.value)}
+                        className={inputClass}
+                        placeholder="e.g. 044"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <div>
+                      <label className={labelClass}>Account Name</label>
+                      <input
+                        type="text"
+                        value={withdrawAccountName}
+                        onChange={(e) => setWithdrawAccountName(e.target.value)}
+                        className={inputClass}
+                        placeholder="e.g. Mama Aisha"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Account Number</label>
+                      <input
+                        type="text"
+                        value={withdrawAccountNumber}
+                        onChange={(e) => setWithdrawAccountNumber(e.target.value)}
+                        className={inputClass}
+                        placeholder="e.g. 1234567890"
+                      />
+                    </div>
+                  </div>
+
+                  <button type="submit" disabled={withdrawLoading} className={primaryBtn}>
+                    {withdrawLoading && <LoadingSpinner />}
+                    {withdrawLoading ? "Requesting..." : "Request Withdrawal"}
+                  </button>
+                </form>
+              </section>
+            )}
+
+            <section className="rounded-[32px] border border-[#222222] bg-[#111111] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.35)] sm:p-7">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.26em] text-[#A0A0A0]">
+                    Ledger
+                  </p>
+                  <h2 className="mt-2 font-display text-3xl font-semibold tracking-tight text-white">
+                    Transaction history
+                  </h2>
+                </div>
+                <button onClick={handleLoadTransactions} disabled={transactionsLoading} className={secondaryBtn}>
+                  {transactionsLoading && <LoadingSpinner />}
+                  {transactionsLoading ? "Loading..." : "Load History"}
+                </button>
+              </div>
+
+              <div className="mt-6 space-y-3">
+                {transactions.length > 0 ? (
+                  transactions.map((transaction) => (
+                    <div
+                      key={transaction.id ?? transaction.provider_transaction_id}
+                      className="grid gap-3 rounded-2xl border border-[#1E1E1E] bg-[#0A0A0A] px-4 py-3 sm:grid-cols-[1fr_auto]"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-mono text-sm text-white">
+                          {transaction.provider_transaction_id ?? "manual-ledger-entry"}
+                        </p>
+                        <p className="mt-1 text-xs text-[#A0A0A0]">
+                          {transaction.created_at
+                            ? new Date(transaction.created_at).toLocaleString()
+                            : "Timestamp pending"}
+                        </p>
+                      </div>
+                      <div className="text-left sm:text-right">
+                        <p className={transaction.type === "debit" ? "font-bold text-[#FF4444]" : "font-bold text-[#00C896]"}>
+                          {transaction.type === "debit" ? "-" : "+"}
+                          {formatCurrency(transaction.amount)}
+                        </p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-[#555555]">
+                          {transaction.status ?? "successful"}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-2xl border border-[#1E1E1E] bg-[#0A0A0A] px-4 py-3 text-sm text-[#A0A0A0]">
+                    No transactions loaded yet. Incoming webhooks and withdrawals appear here when the ledger table is available.
+                  </p>
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-[32px] border border-[#222222] bg-[#111111] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.35)] sm:p-7">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.26em] text-[#A0A0A0]">
+                    Contributors
+                  </p>
+                  <h2 className="mt-2 font-display text-3xl font-semibold tracking-tight text-white">
+                    Wallet contributors
+                  </h2>
+                </div>
+                <button onClick={handleLoadContributors} disabled={contributorsLoading} className={secondaryBtn}>
+                  {contributorsLoading && <LoadingSpinner />}
+                  {contributorsLoading ? "Loading..." : "Load Contributors"}
+                </button>
+              </div>
+
+              <div className="mt-6 space-y-3">
+                {contributors.length > 0 ? (
+                  contributors.map((contributor) => (
+                    <div
+                      key={contributor.id ?? `${contributor.user_id}-${contributor.created_at}`}
+                      className="rounded-2xl border border-[#1E1E1E] bg-[#0A0A0A] px-4 py-3"
+                    >
+                      <p className="truncate font-mono text-sm text-white">
+                        {contributor.user_id}
+                      </p>
+                      <p className="mt-1 text-xs text-[#A0A0A0]">
+                        Added on {new Date(contributor.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-2xl border border-[#1E1E1E] bg-[#0A0A0A] px-4 py-3 text-sm text-[#A0A0A0]">
                     No contributors loaded yet. Click "Load Contributors" to fetch.
                   </p>
                 )}
+              </div>
 
-                <form onSubmit={handleAddContributor} className="grid gap-4 sm:grid-cols-[1fr_auto]">
-                  <div>
-                    <label className={labelClass}>Contributor User ID</label>
-                    <input
-                      type="text"
-                      value={contributorUserId}
-                      onChange={(e) => setContributorUserId(e.target.value)}
-                      className={inputClass}
-                      placeholder="Enter user ID"
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <button type="submit" disabled={loading} className={primaryBtn}>
-                      {loading ? "Adding..." : "Add Contributor"}
-                    </button>
-                  </div>
-                </form>
-              </section>
-            </>
-          )}
-        </main>
-      </div>
+              <form onSubmit={handleAddContributor} className="mt-6 grid gap-4 sm:grid-cols-[1fr_auto]">
+                <div>
+                  <label className={labelClass}>Contributor User ID</label>
+                  <input
+                    type="text"
+                    value={contributorUserId}
+                    onChange={(e) => setContributorUserId(e.target.value)}
+                    className={inputClass}
+                    placeholder="Enter user ID"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button type="submit" disabled={loading} className={`${outlineYellowBtn} w-full`}>
+                    {loading && <LoadingSpinner />}
+                    {loading ? "Adding..." : "Add Contributor"}
+                  </button>
+                </div>
+              </form>
+            </section>
+          </>
+        )}
+      </main>
     </div>
   );
 }

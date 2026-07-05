@@ -9,6 +9,88 @@ app.use(cors());
 const { createVirtualAccount, getAccessToken, fetchVirtualAccount, fetchBankCodes, lookupBankAccount, transferToBank, fetchExchangeRate, convertMoney } = require("./nomba");
 const { supabase, supabaseAdmin } = require("./supabase");
 
+const processedWebhookTransactions = new Set();
+
+function parseJsonField(value) {
+  if (!value || typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeBankDetails(details = {}) {
+  const parsed = parseJsonField(details) || {};
+  return {
+    accountNumber: parsed.accountNumber || parsed.account_number || "",
+    accountName: parsed.accountName || parsed.account_name || parsed.name || "",
+    bankCode: parsed.bankCode || parsed.bank_code || "",
+    bankName: parsed.bankName || parsed.bank_name || "",
+  };
+}
+
+async function userCanAccessWallet(walletId, userId) {
+  const { data: ownerWallet, error: ownerError } = await supabaseAdmin
+    .from("wallets")
+    .select("id")
+    .eq("id", walletId)
+    .eq("user_id", userId)
+    .single();
+
+  if (ownerWallet && !ownerError) return true;
+
+  const { data: contributorRow, error: contributorError } = await supabaseAdmin
+    .from("wallet_contributors")
+    .select("id")
+    .eq("wallet_id", walletId)
+    .eq("user_id", userId)
+    .single();
+
+  return !!contributorRow && !contributorError;
+}
+
+async function getAccessibleWalletByName(walletName, userId) {
+  const { data: ownerWallet, error: ownerError } = await supabaseAdmin
+    .from("wallets")
+    .select("*")
+    .eq("name", walletName)
+    .eq("user_id", userId)
+    .single();
+
+  if (ownerWallet && !ownerError) return ownerWallet;
+  if (ownerError && ownerError.code !== "PGRST116") throw ownerError;
+
+  const { data: possibleWallets, error: walletError } = await supabaseAdmin
+    .from("wallets")
+    .select("*")
+    .eq("name", walletName);
+
+  if (walletError) throw walletError;
+
+  for (const wallet of possibleWallets || []) {
+    if (await userCanAccessWallet(wallet.id, userId)) {
+      return wallet;
+    }
+  }
+
+  return null;
+}
+
+async function recordWalletTransaction(transaction) {
+  try {
+    const { error } = await supabaseAdmin
+      .from("wallet_transactions")
+      .insert([transaction]);
+
+    if (error && error.code !== "42P01") {
+      console.warn("Wallet transaction ledger insert skipped:", error.message);
+    }
+  } catch (error) {
+    console.warn("Wallet transaction ledger unavailable:", error.message);
+  }
+}
+
 async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
 
@@ -30,7 +112,7 @@ async function requireAuth(req, res, next) {
 app.use(express.json());
 
 app.get("/", (req, res) => {
-  res.send("RemitSplit backend is live 🚀");
+  res.send("RemitSplit backend is live");
 });
 
 app.post("/webhooks/nomba", async (req, res) => {
@@ -72,7 +154,13 @@ app.post("/webhooks/nomba", async (req, res) => {
 
     const accountRef = payload?.data?.transaction?.aliasAccountReference;
     const amountPaid = payload?.data?.transaction?.transactionAmount;
+    const transactionId = payload?.data?.transaction?.transactionId || payload?.requestId;
     const numericAmountPaid = typeof amountPaid === "string" ? parseFloat(amountPaid) : amountPaid;
+
+    if (transactionId && processedWebhookTransactions.has(transactionId)) {
+      console.log(`Duplicate webhook transaction ignored: ${transactionId}`);
+      return res.status(200).json({ received: true, duplicate: true });
+    }
 
     if (accountRef && !Number.isNaN(numericAmountPaid)) {
       if (!supabaseAdmin || typeof supabaseAdmin.from !== "function") {
@@ -97,6 +185,19 @@ app.post("/webhooks/nomba", async (req, res) => {
         if (updateError) {
           console.error("Supabase update wallet error:", updateError);
         } else {
+          if (transactionId) processedWebhookTransactions.add(transactionId);
+
+          await recordWalletTransaction({
+            wallet_id: wallet.id,
+            type: "credit",
+            amount: Number(numericAmountPaid),
+            currency: "NGN",
+            provider: "nomba",
+            provider_transaction_id: transactionId,
+            status: "successful",
+            metadata: payload,
+          });
+
           // If this is a split wallet and the target is reached, attempt auto-payout
           try {
             const targetAmount = Number(wallet.target_amount || 0);
@@ -104,22 +205,13 @@ app.post("/webhooks/nomba", async (req, res) => {
               if (wallet.status === "completed") {
                 console.log(`Split ${wallet.name} already completed, skipping duplicate payout`);
               } else {
-                // Parse beneficiary details which may be returned as object or string
-                let beneficiary = wallet.beneficiary_bank_details;
-                try {
-                  if (typeof beneficiary === "string" && beneficiary.trim() !== "") {
-                    beneficiary = JSON.parse(beneficiary);
-                  }
-                } catch (parseErr) {
-                  console.error(`Cannot parse beneficiary_bank_details for ${wallet.name}:`, parseErr.message || parseErr);
-                  beneficiary = null;
-                }
+                const beneficiary = normalizeBankDetails(wallet.beneficiary_bank_details);
 
                 if (!beneficiary || !beneficiary.accountNumber || !beneficiary.bankCode || !beneficiary.accountName) {
                   console.error(`Cannot auto-payout split ${wallet.name}: missing beneficiary bank details`);
                 } else {
                   try {
-                    const merchantTxRef = `split-payout-${wallet.id}-${Date.now()}`;
+                    const merchantTxRef = `split-payout-${wallet.id}-${transactionId || Date.now()}`;
                     const transferResult = await transferToBank({
                       amount: updatedBalance,
                       accountNumber: beneficiary.accountNumber,
@@ -139,6 +231,16 @@ app.post("/webhooks/nomba", async (req, res) => {
                     if (statusUpdateError) {
                       console.error(`Failed to update status to completed for ${wallet.name}:`, statusUpdateError);
                     } else {
+                      await recordWalletTransaction({
+                        wallet_id: wallet.id,
+                        type: "debit",
+                        amount: updatedBalance,
+                        currency: "NGN",
+                        provider: "nomba",
+                        provider_transaction_id: merchantTxRef,
+                        status: "successful",
+                        metadata: transferResult,
+                      });
                       console.log(`Split auto-payout successful for ${wallet.name}`, { transferResult });
                     }
                   } catch (payoutErr) {
@@ -205,8 +307,9 @@ app.post("/auth/login", async (req, res) => {
 
 app.post("/wallets", requireAuth, async (req, res) => {
   try {
-    const { name, type, target_amount, beneficiary_bank_details } = req.body;
+    const { name, type, target_amount, contributors_count, beneficiary_bank_details, organizer_bank_details, deadline } = req.body;
     const walletType = type === "split" ? "split" : "remit";
+    const contributorsCount = Number(contributors_count || 1);
 
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, error: "Wallet name is required" });
@@ -215,6 +318,15 @@ app.post("/wallets", requireAuth, async (req, res) => {
     if (walletType === "split") {
       if (!target_amount || Number(target_amount) <= 0) {
         return res.status(400).json({ success: false, error: "Target amount is required for split wallets" });
+      }
+
+      if (!Number.isInteger(contributorsCount) || contributorsCount < 1) {
+        return res.status(400).json({ success: false, error: "Contributors count must be at least 1" });
+      }
+
+      const organizerBankDetails = normalizeBankDetails(organizer_bank_details);
+      if (!organizerBankDetails.accountNumber || !organizerBankDetails.accountName || !organizerBankDetails.bankCode) {
+        return res.status(400).json({ success: false, error: "Organizer account name, account number, and bank code are required for split payouts" });
       }
     }
 
@@ -243,7 +355,9 @@ app.post("/wallets", requireAuth, async (req, res) => {
     }
 
     const accountRef = `${walletType === "split" ? "split" : "wallet"}-${Date.now()}`;
-    const expectedAmount = walletType === "split" ? String(target_amount) : "0.00";
+    const expectedAmount = walletType === "split"
+      ? (Number(target_amount) / contributorsCount).toFixed(2)
+      : "0.00";
     const accountPayload = {
       accountRef,
       accountName: name || accountRef,
@@ -251,18 +365,18 @@ app.post("/wallets", requireAuth, async (req, res) => {
     };
 
     if (walletType === "split") {
-      accountPayload.expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 19)
-        .replace("T", " ");
+      const expiryDate = deadline ? new Date(deadline) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      accountPayload.expiryDate = expiryDate.toISOString().slice(0, 19).replace("T", " ");
     }
 
     const virtualAccount = await createVirtualAccount(accountPayload);
 
-    const remitBeneficiary = walletType === "remit" ? {
-      name: beneficiary_bank_details.name,
-      account_number: beneficiary_bank_details.account_number,
-    } : null;
+    const payoutDetails = walletType === "remit"
+      ? {
+          name: beneficiary_bank_details.name,
+          account_number: beneficiary_bank_details.account_number,
+        }
+      : normalizeBankDetails(organizer_bank_details);
 
     const { data: wallet, error: insertError } = await supabaseAdmin
       .from("wallets")
@@ -273,7 +387,7 @@ app.post("/wallets", requireAuth, async (req, res) => {
           type: walletType,
           target_amount: walletType === "split" ? Number(target_amount) : null,
           current_balance: 0,
-          beneficiary_bank_details: remitBeneficiary,
+          beneficiary_bank_details: payoutDetails,
           status: "active",
           user_id: req.userId
         }
@@ -289,6 +403,53 @@ app.post("/wallets", requireAuth, async (req, res) => {
     res.json({ success: true, wallet, virtualAccount, reused: false });
   } catch (error) {
     console.error("Create wallet error:", error);
+    res.status(500).json({ success: false, error: error.response?.data || error.message });
+  }
+});
+
+app.get("/wallets", requireAuth, async (req, res) => {
+  try {
+    const { data: ownedWallets, error: ownedError } = await supabaseAdmin
+      .from("wallets")
+      .select("*")
+      .eq("user_id", req.userId)
+      .order("created_at", { ascending: false });
+
+    if (ownedError) {
+      console.error("Supabase fetch owned wallets error:", ownedError);
+      return res.status(500).json({ success: false, error: ownedError.message });
+    }
+
+    const { data: contributorRows, error: contributorError } = await supabaseAdmin
+      .from("wallet_contributors")
+      .select("wallet_id")
+      .eq("user_id", req.userId);
+
+    if (contributorError && contributorError.code !== "42P01") {
+      console.error("Supabase fetch contributor wallets error:", contributorError);
+      return res.status(500).json({ success: false, error: contributorError.message });
+    }
+
+    const contributorWalletIds = [...new Set((contributorRows || []).map((row) => row.wallet_id).filter(Boolean))];
+    let sharedWallets = [];
+
+    if (contributorWalletIds.length > 0) {
+      const { data, error } = await supabaseAdmin
+        .from("wallets")
+        .select("*")
+        .in("id", contributorWalletIds);
+
+      if (error) {
+        console.error("Supabase fetch shared wallets error:", error);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      sharedWallets = data || [];
+    }
+
+    res.json({ success: true, wallets: [...(ownedWallets || []), ...sharedWallets] });
+  } catch (error) {
+    console.error("List wallets error:", error);
     res.status(500).json({ success: false, error: error.response?.data || error.message });
   }
 });
@@ -336,20 +497,16 @@ app.post("/withdraw", requireAuth, async (req, res) => {
   try {
     const { walletName, amount, accountNumber, accountName, bankCode } = req.body;
 
-    const { data: wallet, error: fetchError } = await supabaseAdmin
-      .from("wallets")
-      .select("*")
-      .eq("name", walletName)
-      .eq("user_id", req.userId)
-      .single();
-
-    if (fetchError) {
-      if (fetchError.code === "PGRST116") {
-        return res.status(404).json({ success: false, error: "Wallet not found" });
-      }
-
+    let wallet;
+    try {
+      wallet = await getAccessibleWalletByName(walletName, req.userId);
+    } catch (fetchError) {
       console.error("Supabase fetch wallet for withdrawal error:", fetchError);
       return res.status(500).json({ success: false, error: fetchError.message });
+    }
+
+    if (!wallet) {
+      return res.status(404).json({ success: false, error: "Wallet not found" });
     }
 
     const parsedAmount = Number(amount);
@@ -363,11 +520,17 @@ app.post("/withdraw", requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: "Insufficient balance" });
     }
 
-    const merchantTxRef = `withdraw-${Date.now()}`;
+    if (!accountNumber || !accountName || !bankCode) {
+      return res.status(400).json({ success: false, error: "Account number, account name, and bank code are required" });
+    }
+
+    const verifiedAccount = await lookupBankAccount({ accountNumber, bankCode });
+    const verifiedName = verifiedAccount?.accountName || verifiedAccount?.account_name || accountName;
+    const merchantTxRef = `withdraw-${wallet.id}-${Date.now()}`;
     const transferResult = await transferToBank({
       amount: parsedAmount,
       accountNumber,
-      accountName,
+      accountName: verifiedName,
       bankCode,
       merchantTxRef,
       senderName: "RemitSplit",
@@ -385,6 +548,17 @@ app.post("/withdraw", requireAuth, async (req, res) => {
       return res.status(500).json({ success: false, error: updateError.message });
     }
 
+    await recordWalletTransaction({
+      wallet_id: wallet.id,
+      type: "debit",
+      amount: parsedAmount,
+      currency: "NGN",
+      provider: "nomba",
+      provider_transaction_id: merchantTxRef,
+      status: "successful",
+      metadata: transferResult,
+    });
+
     res.json({ success: true, transfer: transferResult, newBalance: updatedBalance });
   } catch (error) {
     console.error("Withdrawal error:", error);
@@ -396,20 +570,16 @@ app.post("/contribute/quote", requireAuth, async (req, res) => {
   try {
     const { walletName, amount, currency } = req.body;
 
-    const { data: wallet, error: fetchError } = await supabaseAdmin
-      .from("wallets")
-      .select("*")
-      .eq("name", walletName)
-      .eq("user_id", req.userId)
-      .single();
-
-    if (fetchError) {
-      if (fetchError.code === "PGRST116") {
-        return res.status(404).json({ success: false, error: "Wallet not found" });
-      }
-
+    let wallet;
+    try {
+      wallet = await getAccessibleWalletByName(walletName, req.userId);
+    } catch (fetchError) {
       console.error("Supabase fetch wallet for quote error:", fetchError);
       return res.status(500).json({ success: false, error: fetchError.message });
+    }
+
+    if (!wallet) {
+      return res.status(404).json({ success: false, error: "Wallet not found" });
     }
 
     const conversion = await convertMoney({
@@ -476,9 +646,14 @@ app.post("/wallets/:walletId/contributors", requireAuth, async (req, res) => {
 app.get("/wallets/:walletId/balance", requireAuth, async (req, res) => {
   try {
     const walletId = req.params.walletId;
+
+    if (!(await userCanAccessWallet(walletId, req.userId))) {
+      return res.status(403).json({ success: false, error: "Access denied" });
+    }
+
     const { data: wallet, error } = await supabaseAdmin
       .from("wallets")
-      .select("name, current_balance, target_amount, status")
+      .select("id, account_ref, name, type, current_balance, target_amount, status, beneficiary_bank_details")
       .eq("id", walletId)
       .single();
 
@@ -489,10 +664,14 @@ app.get("/wallets/:walletId/balance", requireAuth, async (req, res) => {
     res.json({
       success: true,
       wallet: {
+        id: wallet.id,
+        account_ref: wallet.account_ref,
         name: wallet.name,
+        type: wallet.type,
         current_balance: wallet.current_balance,
         target_amount: wallet.target_amount,
-        status: wallet.status
+        status: wallet.status,
+        beneficiary_bank_details: wallet.beneficiary_bank_details,
       }
     });
   } catch (error) {
@@ -542,6 +721,37 @@ app.get("/wallets/:walletId/contributors", requireAuth, async (req, res) => {
     res.json({ success: true, contributors });
   } catch (error) {
     console.error("Wallet contributors error:", error);
+    res.status(500).json({ success: false, error: error.response?.data || error.message });
+  }
+});
+
+app.get("/wallets/:walletId/transactions", requireAuth, async (req, res) => {
+  try {
+    const walletId = req.params.walletId;
+
+    if (!(await userCanAccessWallet(walletId, req.userId))) {
+      return res.status(403).json({ success: false, error: "Access denied" });
+    }
+
+    const { data: transactions, error } = await supabaseAdmin
+      .from("wallet_transactions")
+      .select("*")
+      .eq("wallet_id", walletId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      if (error.code === "42P01") {
+        return res.json({ success: true, transactions: [] });
+      }
+
+      console.error("Fetch wallet transactions error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    res.json({ success: true, transactions: transactions || [] });
+  } catch (error) {
+    console.error("Wallet transactions error:", error);
     res.status(500).json({ success: false, error: error.response?.data || error.message });
   }
 });

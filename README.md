@@ -1,23 +1,69 @@
 # RemitSplit
-Send money home, split it instantly — built on Nomba's API for DevCareer x Nomba Hackathon 2026
 
-# RemitSplit Frontend
+Send money home. Share it instantly.
 
-## Setup
-1. `pnpm install`
-2. `.env` already configured to point at local backend (http://localhost:3000)
-3. `pnpm run dev`
+RemitSplit is a dual-mode payment MVP for the DevCareer x Nomba Hackathon 2026. It combines persistent family remittance wallets and one-off split collections on top of Nomba Dedicated Virtual Accounts, Global Payout, Transfers, and Webhooks.
 
-## What's already done
-- Vite + React + Tailwind CSS v4 configured and working
-- `src/lib/api.js` has working signup/login helpers connected to the backend
+## Apps
 
-## Backend routes available
-See backend/index.js for the full list: /auth/signup, /auth/login, /wallets, /withdraw, /contribute/quote, /banks, /exchange-rate, /convert, /verify-account, /webhooks/nomba
+- `frontend`: React + Tailwind CSS
+- `backend`: Express + Supabase + Nomba APIs
 
-## What's needed (see PRD Section 9 for full breakdown)
-- Login/Signup pages
-- Wallet creation flow
-- Contribution flow
-- Withdrawal flow
-- Dashboard with balance + transaction history
+## Local Setup
+
+Backend:
+
+```bash
+cd backend
+npm install
+npm start
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Required Environment
+
+Backend `.env`:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `NOMBA_SUPABASE_SERVICE_KEY`
+- `NOMBA_BASE_URL`
+- `NOMBA_CLIENT_ID`
+- `NOMBA_PRIVATE_KEY`
+- `NOMBA_ACCOUNT_ID`
+- `NOMBA_WEBHOOK_SECRET`
+
+Frontend `.env`:
+
+- `VITE_API_URL`
+
+## Main Backend Routes
+
+- `POST /auth/signup`
+- `POST /auth/login`
+- `GET /wallets`
+- `POST /wallets`
+- `GET /wallets/:walletId/balance`
+- `GET /wallets/:walletId/contributors`
+- `POST /wallets/:walletId/contributors`
+- `GET /wallets/:walletId/transactions`
+- `POST /contribute/quote`
+- `POST /withdraw`
+- `GET /banks`
+- `POST /verify-account`
+- `GET /public/split/:accountRef`
+- `POST /webhooks/nomba`
+
+## Submission Notes
+
+- Architecture and security summary: `ARCHITECTURE_SECURITY.md`
+- Optional Supabase ledger SQL: `supabase_schema.sql`
+- Split auto-payout needs organizer bank details during split creation.
+- Public split payment links use `/pay/:accountRef`.

@@ -2,18 +2,13 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { signup, login } from "../lib/api";
 
-function WovenDivider({ className = "" }) {
+function LoadingSpinner() {
   return (
-    <div className={`mt-3 inline-flex items-center ${className}`}>
-      <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#FFD600] -mr-2.5" />
-      <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#F2C024] -mr-2.5" />
-      <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#B38612]" />
-    </div>
+    <span className="inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
   );
 }
 
-function Auth({ theme, toggleTheme }) {
-  const isLight = theme === "light";
+function Auth() {
   const [mode, setMode] = useState("login"); // "login" or "signup"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,166 +40,199 @@ function Auth({ theme, toggleTheme }) {
     }
   }
 
+  const inputClass =
+    "w-full rounded-2xl border border-[#222222] bg-[#1A1A1A] px-4 py-3.5 text-white outline-none transition placeholder:text-[#444444] focus:border-[#FFD600] focus:ring-0";
+  const labelClass =
+    "mb-2 block text-xs font-bold uppercase tracking-[0.22em] text-[#A0A0A0]";
+
   return (
-    <div className={`min-h-screen px-3 py-6 sm:px-4 sm:py-10 ${isLight ? "bg-[#FEF7D2] text-[#111827]" : "bg-[#050505] text-white"}`}>
-      <div className={`mx-auto w-full max-w-md overflow-hidden rounded-[20px] sm:rounded-[32px] border px-0 ${isLight ? "border-[#D4A574] bg-[#fff5c6] shadow-[0_24px_60px_rgba(255,214,0,0.12)]" : "border-[#1E1E1E] bg-[#0B0B0B] shadow-[0_28px_80px_rgba(0,0,0,0.45)]"}`}>
-        <div className={`px-4 py-6 sm:px-6 sm:py-8 text-center ${isLight ? "bg-[#FFF2A5]" : "bg-[#111111]"}`}>
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-left">
-              <h1 className={`text-3xl sm:text-4xl font-display font-semibold tracking-tight ${isLight ? "text-[#111827]" : "text-white"}`}>RemitSplit</h1>
-              <p className={`mt-3 max-w-sm text-sm leading-6 ${isLight ? "text-[#7A5F0D]" : "text-[#C1C1C1]"}`}>
-                Create and manage shared contribution wallets — invite contributors, set a target amount, track balances in real time, and withdraw to linked bank accounts.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={toggleTheme}
-              aria-label={isLight ? "Switch to dark mode" : "Switch to light mode"}
-              className={`rounded-full border p-2 sm:p-3 text-lg transition ${isLight ? "border-[#D4A574] bg-[#FFF3A7] text-[#111827] hover:bg-[#FFE77E]" : "border-[#FFD600] bg-[#111111] text-[#FFD600] hover:bg-[#1E1E1E]"}`}
+    <div className="min-h-screen bg-[#0A0A0A] text-white lg:grid lg:grid-cols-[40%_60%]">
+      <aside className="relative hidden min-h-screen overflow-hidden bg-[#FFD600] px-10 py-12 text-[#0A0A0A] lg:flex lg:flex-col lg:justify-between xl:px-14">
+        <div className="absolute right-[-120px] top-[-120px] h-80 w-80 rounded-full border-[36px] border-[#0A0A0A]/10" />
+        <div className="absolute bottom-28 left-[-80px] h-56 w-56 rotate-45 rounded-[48px] border-[28px] border-[#0A0A0A]/10" />
+
+        <div className="relative">
+          <p className="text-xs font-black uppercase tracking-[0.26em] text-[#0A0A0A]/70">
+            RemitSplit
+          </p>
+          <h1 className="mt-10 max-w-md font-display text-6xl font-semibold leading-[0.95] tracking-tight xl:text-7xl">
+            Send money home. Split it instantly.
+          </h1>
+          <p className="mt-6 max-w-sm text-lg font-medium leading-8 text-[#0A0A0A]/70">
+            Powered by Nomba's payment infrastructure
+          </p>
+        </div>
+
+        <div className="relative space-y-4">
+          {[
+            "🌍 Diaspora remittance with locked FX rates",
+            "💰 Group splits with auto-payout",
+            "⚡ Instant settlement",
+          ].map((feature) => (
+            <div
+              key={feature}
+              className="rounded-full border border-[#0A0A0A]/15 bg-[#0A0A0A]/10 px-5 py-3 text-sm font-bold backdrop-blur"
             >
-              {isLight ? "🌙" : "☀"}
-            </button>
+              {feature}
+            </div>
+          ))}
+
+          <div className="pt-8">
+            <div className="inline-flex items-center gap-3 text-sm font-black uppercase tracking-[0.18em] text-[#0A0A0A]/70">
+              <span className="grid h-8 w-8 place-items-center rounded-full border border-[#0A0A0A]/25 font-display text-base">
+                X
+              </span>
+              Built on Nomba
+            </div>
           </div>
         </div>
+      </aside>
 
-        <div className={`flex rounded-b-[20px] sm:rounded-b-[32px] p-1 mb-4 sm:mb-6 border ${isLight ? "bg-[#FFF3A7] border-[#D4A574]" : "bg-[#090909] border-[#222222]"}`}>
-          <button
-            onClick={() => setMode("login")}
-            className={`flex-1 rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-sm font-semibold transition ${
-              mode === "login"
-                ? isLight
-                  ? "bg-[#111827] text-white"
-                  : "bg-[#FFD600] text-[#101010]"
-                : isLight
-                ? "text-[#8C7135] hover:text-[#5F4818]"
-                : "text-[#C9C9C9] hover:text-white"
-            }`}
-          >
-            Log In
-          </button>
-          <button
-            onClick={() => setMode("signup")}
-            className={`flex-1 rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-sm font-semibold transition ${
-              mode === "signup"
-                ? isLight
-                  ? "bg-[#111827] text-white"
-                  : "bg-[#FFD600] text-[#101010]"
-                : isLight
-                ? "text-[#8C7135] hover:text-[#5F4818]"
-                : "text-[#C9C9C9] hover:text-white"
-            }`}
-          >
-            Sign Up
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === "signup" && (
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>Full Name</label>
-              <input
-                type="text"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className={`w-full rounded-3xl border px-3 py-2 sm:px-4 sm:py-3 ${isLight ? "border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400" : "border-[#222222] bg-[#090909] text-white placeholder:text-[#5A5A5A]"} focus:outline-none focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]`}
-                placeholder="John Doe"
-              />
+      <main className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-8">
+        <div className="w-full max-w-md">
+          <div className="mb-10">
+            <div className="font-display text-4xl font-semibold tracking-tight text-white">
+              RemitSplit<span className="text-[#FFD600]">.</span>
             </div>
-          )}
-          <div>
-            <label className={`block text-sm font-medium mb-1 ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>Email address</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={`w-full rounded-3xl border px-3 py-2 sm:px-4 sm:py-3 ${isLight ? "border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400" : "border-[#222222] bg-[#090909] text-white placeholder:text-[#5A5A5A]"} focus:outline-none focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]`}
-              placeholder="you@example.com"
-            />
+            <p className="mt-3 text-sm leading-6 text-[#A0A0A0] lg:hidden">
+              Send money home, split collections, and settle instantly on Nomba rails.
+            </p>
           </div>
 
-          {mode === "signup" && (
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>Phone Number</label>
-              <input
-                type="tel"
-                required
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                className={`w-full rounded-3xl border px-3 py-2 sm:px-4 sm:py-3 ${isLight ? "border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400" : "border-[#222222] bg-[#090909] text-white placeholder:text-[#5A5A5A]"} focus:outline-none focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]`}
-                placeholder="+234 800 000 0000"
-              />
-            </div>
-          )}
-
-          {mode === "signup" && (
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>Country</label>
-              <input
-                type="text"
-                required
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                className={`w-full rounded-3xl border px-3 py-2 sm:px-4 sm:py-3 ${isLight ? "border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400" : "border-[#222222] bg-[#090909] text-white placeholder:text-[#5A5A5A]"} focus:outline-none focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]`}
-                placeholder="Nigeria"
-              />
-            </div>
-          )}
-
-          <div>
-            <label className={`block text-sm font-medium mb-1 ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>Password</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={`w-full rounded-3xl border px-3 py-2 sm:px-4 sm:py-3 ${isLight ? "border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400" : "border-[#222222] bg-[#090909] text-white placeholder:text-[#5A5A5A]"} focus:outline-none focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]`}
-              placeholder="••••••••"
-            />
+          <div className="mb-8 flex border-b border-[#222222]">
+            {[
+              ["login", "Login"],
+              ["signup", "Sign Up"],
+            ].map(([tabMode, label]) => (
+              <button
+                key={tabMode}
+                type="button"
+                onClick={() => setMode(tabMode)}
+                className={`relative px-1 pb-4 pr-8 text-sm font-bold transition ${
+                  mode === tabMode ? "text-white" : "text-[#555555] hover:text-[#A0A0A0]"
+                }`}
+              >
+                {label}
+                {mode === tabMode && (
+                  <span className="absolute bottom-[-1px] left-0 h-0.5 w-12 rounded-full bg-[#FFD600]" />
+                )}
+              </button>
+            ))}
           </div>
 
-          {mode === "signup" && (
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {mode === "signup" && (
+              <div>
+                <label className={labelClass}>Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className={inputClass}
+                  placeholder="John Doe"
+                />
+              </div>
+            )}
+
             <div>
-              <label className={`block text-sm font-medium mb-1 ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>Confirm Password</label>
+              <label className={labelClass}>Email Address</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={inputClass}
+                placeholder="you@example.com"
+              />
+            </div>
+
+            {mode === "signup" && (
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                  <label className={labelClass}>Phone Number</label>
+                  <input
+                    type="tel"
+                    required
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    className={inputClass}
+                    placeholder="+234 800 000 0000"
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Country</label>
+                  <input
+                    type="text"
+                    required
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    className={inputClass}
+                    placeholder="Nigeria"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className={labelClass}>Password</label>
               <input
                 type="password"
                 required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full rounded-3xl border px-3 py-2 sm:px-4 sm:py-3 ${isLight ? "border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400" : "border-[#222222] bg-[#090909] text-white placeholder:text-[#5A5A5A]"} focus:outline-none focus:ring-2 focus:ring-[#FFD600]/80 focus:border-[#FFD600]`}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={inputClass}
                 placeholder="••••••••"
               />
             </div>
-          )}
 
-          {mode === "signup" && (
-            <label className={`flex items-start gap-2 text-sm ${isLight ? "text-slate-700" : "text-[#D9D9D9]"}`}>
-              <input
-                type="checkbox"
-                checked={agreeToTerms}
-                onChange={(e) => setAgreeToTerms(e.target.checked)}
-                className="mt-0.5"
-              />
-              <span>I agree to the Terms of Service</span>
-            </label>
-          )}
+            {mode === "signup" && (
+              <div>
+                <label className={labelClass}>Confirm Password</label>
+                <input
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={inputClass}
+                  placeholder="••••••••"
+                />
+              </div>
+            )}
 
-          {error && (
-            <p className={`rounded-3xl border px-4 py-3 text-sm ${isLight ? "border-slate-200 bg-slate-100 text-slate-900" : "border-[#3D1616] bg-[#380F0F] text-[#FFB3B3]"}`}>
-              {error}
-            </p>
-          )}
+            {mode === "signup" && (
+              <label className="flex items-start gap-3 rounded-2xl border border-[#222222] bg-[#111111] px-4 py-3 text-sm leading-6 text-[#A0A0A0]">
+                <input
+                  type="checkbox"
+                  checked={agreeToTerms}
+                  onChange={(e) => setAgreeToTerms(e.target.checked)}
+                  className="mt-1 accent-[#FFD600]"
+                />
+                <span>I agree to the Terms of Service</span>
+              </label>
+            )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className={`w-full rounded-3xl px-4 py-2 sm:px-5 sm:py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${isLight ? "bg-[#111827] text-white hover:bg-[#0f172a]" : "bg-[#FFD600] text-[#101010] hover:bg-[#E6C900]"}`}
-          >
-            {loading ? "Please wait..." : mode === "login" ? "Log In" : "Create Account"}
-          </button>
-        </form>
-      </div>
+            {error && (
+              <p className="rounded-xl border border-[#FF4444]/30 bg-[#FF4444]/10 px-4 py-3 text-sm text-[#FF4444]">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex w-full items-center justify-center gap-3 rounded-2xl bg-[#FFD600] px-5 py-4 text-sm font-black text-[#0A0A0A] transition hover:bg-[#E6C900] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {loading && <LoadingSpinner />}
+              {loading ? "Please wait..." : mode === "login" ? "Log In" : "Create Account"}
+            </button>
+          </form>
+
+          <div className="mt-8 border-t border-[#222222] pt-5 text-center text-xs leading-5 text-[#555555]">
+            By continuing, you agree to RemitSplit's terms
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

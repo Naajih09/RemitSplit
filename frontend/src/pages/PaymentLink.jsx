@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-function PaymentLink({ theme }) {
-  const isLight = theme === "light";
+function PaymentLink() {
   const { accountRef } = useParams();
   const [account, setAccount] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -40,87 +39,107 @@ function PaymentLink({ theme }) {
     }).format(amount);
   }
 
+  const targetAmount = Number(account?.target_amount ?? account?.expectedAmount ?? 0);
+  const currentAmount = Number(account?.current_balance ?? 0);
+  const progressPercent = Math.min(100, ((currentAmount / Number(targetAmount || 1)) * 100) || 0);
+  const displayAccountNumber = account?.accountNumber ?? accountRef;
+
   return (
-    <div className={`min-h-screen ${isLight ? "bg-[#FEF7D2] text-[#111827]" : "bg-[#080808] text-white"}`}>
-      <div className="mx-auto max-w-3xl px-4 py-10">
-        <div className={`rounded-[28px] border p-8 ${isLight ? "border-[#D4A574] bg-[#FFF7D0]" : "border-[#222222] bg-[#111111]"}`}>
-          <h1 className={`text-3xl font-semibold ${isLight ? "text-[#111827]" : "text-white"}`}>Pay Split</h1>
-          <p className={`mt-3 text-sm ${isLight ? "text-[#7A5F0D]" : "text-[#A8A8A8]"}`}>
-            Use this page to pay into the split via the dedicated virtual account.
-          </p>
-
-          {loading ? (
-            <p className="mt-6 text-sm">Loading payment details...</p>
-          ) : error ? (
-            <div className={`mt-6 rounded-3xl border px-4 py-3 ${isLight ? "border-[#D4A574] bg-[#FFF4B8] text-[#111827]" : "border-[#3D1212] bg-[#300B0B] text-[#FFB3B3]"}`}>
-              {error}
+    <div className="flex min-h-screen items-center justify-center bg-[#0A0A0A] px-5 py-10 text-white">
+      <div className="w-full max-w-[480px] rounded-[40px] border border-[#222222] bg-[#111111] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.55)] sm:p-8">
+        {loading ? (
+          <div className="py-16 text-center">
+            <div className="mx-auto h-12 w-12 rounded-full border-2 border-[#FFD600] border-t-transparent animate-spin" />
+            <p className="mt-5 text-sm text-[#A0A0A0]">Loading payment details...</p>
+          </div>
+        ) : error ? (
+          <div className="py-14 text-center">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-[#FF4444]/30 bg-[#FF4444]/10 text-xl text-[#FF4444]">
+              !
             </div>
-          ) : (
-            <div className="mt-6 space-y-4">
-              <div className={`rounded-3xl border p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
-  <p className="text-sm uppercase tracking-[0.24em] text-[#FFD600]">Virtual Account</p>
-  {account?.accountNumber ? (
-    <p className={`mt-3 text-2xl font-bold tracking-widest ${isLight ? "text-slate-900" : "text-white"}`}>
-      {account.accountNumber}
-    </p>
-  ) : (
-    <p className={`mt-3 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{accountRef}</p>
-  )}
-  <p className={`mt-1 text-sm text-[#FFD600]`}>Nombank MFB</p>
-  <p className={`mt-2 text-sm ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>
-    Send exactly the expected amount to this account number to contribute to the split.
-  </p>
-</div>
+            <h1 className="mt-5 font-display text-2xl font-semibold text-white">
+              Payment link unavailable
+            </h1>
+            <p className="mt-3 text-sm leading-6 text-[#A0A0A0]">{error}</p>
+          </div>
+        ) : (
+          <>
+            <div>
+              <span className="inline-flex rounded-full border border-[#FFD600]/30 bg-[#FFD600]/10 px-3 py-1 text-xs font-bold text-[#FFD600]">
+                RemitSplit · Powered by Nomba
+              </span>
+              <h1 className="mt-5 font-display text-3xl font-semibold tracking-tight text-white">
+                Pay into Split
+              </h1>
+              <p className="mt-2 text-sm leading-6 text-[#A0A0A0]">
+                {account?.name ?? account?.accountName ?? "Shared contribution wallet"}
+              </p>
+            </div>
 
-              <div className={`rounded-3xl border p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
-                <p className="text-sm text-[#A8A8A8]">Expected Amount</p>
-                <p className={`mt-3 text-2xl font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{formatCurrency(account.expectedAmount)}</p>
+            <div className="mt-6 rounded-2xl border-2 border-[#FFD600] bg-[#0A0A0A] p-5">
+              <p className="text-xs font-black uppercase tracking-[0.24em] text-[#FFD600]">
+                Virtual Account Number
+              </p>
+              <p className="mt-4 break-all text-4xl font-black tracking-widest text-white">
+                {displayAccountNumber}
+              </p>
+              <p className="mt-3 text-sm font-medium text-[#A0A0A0]">Nombank MFB</p>
+            </div>
+
+            <div className="mt-5 divide-y divide-[#222222] rounded-3xl border border-[#222222] bg-[#0A0A0A] px-5">
+              <div className="flex items-center justify-between gap-4 py-4">
+                <span className="text-sm text-[#A0A0A0]">Expected amount</span>
+                <span className="font-display text-2xl font-semibold text-white">
+                  {formatCurrency(account.expectedAmount)}
+                </span>
               </div>
-
-              <div className={`rounded-3xl border p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
-                <p className="text-sm text-[#A8A8A8]">Account Name</p>
-                <p className={`mt-3 text-lg font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{account.accountName}</p>
-                <p className={`mt-2 text-sm ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Account ref: {account.accountRef}</p>
-                {account.accountNumber && (
-                  <p className={`mt-2 text-sm ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Account number: {account.accountNumber}</p>
-                )}
-                {account.expiryDate && (
-                  <p className={`mt-2 text-sm ${isLight ? "text-slate-600" : "text-[#A8A8A8]"}`}>Expires: {new Date(account.expiryDate).toLocaleDateString() ?? account.expiryDate}</p>
-                )}
-              </div>
-
-              <div className={`rounded-3xl border p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
-                <p className="text-sm text-[#A8A8A8]">Split Progress</p>
-                <div className="mt-3 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Collected</span>
-                    <span>{formatCurrency(account.current_balance ?? 0)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Target</span>
-                    <span>{formatCurrency(account.target_amount ?? account.expectedAmount ?? 0)}</span>
-                  </div>
-                  <div className="h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
-                    <div
-                      className="h-full rounded-full bg-[#FFD600]"
-                      style={{ width: `${Math.min(100, ((Number(account.current_balance ?? 0) / Number(account.target_amount ?? account.expectedAmount ?? 1)) * 100) || 0)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className={`rounded-3xl border p-5 ${isLight ? "border-slate-200 bg-slate-50" : "border-[#222222] bg-[#121212]"}`}>
-                <p className="text-sm text-[#A8A8A8]">Payment Instructions</p>
-                <ul className="mt-3 space-y-2 text-sm leading-6">
-                  <li>1. Copy the account number above.</li>
-                  <li>2. Pay from your bank app or USSD.</li>
-                  <li>3. Use the amount shown to complete the split.</li>
-                  <li>4. Return to this page if you need to confirm the account details.</li>
-                </ul>
+              <div className="flex items-center justify-between gap-4 py-4">
+                <span className="text-sm text-[#A0A0A0]">Expiry date</span>
+                <span className="text-sm font-bold text-white">
+                  {account.expiryDate
+                    ? new Date(account.expiryDate).toLocaleDateString()
+                    : "No expiry set"}
+                </span>
               </div>
             </div>
-          )}
-        </div>
+
+            <div className="mt-6">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm font-bold text-white">Split Progress</p>
+                <p className="text-sm text-[#A0A0A0]">{Math.round(progressPercent)}%</p>
+              </div>
+              <div className="mb-3 flex items-center justify-between text-xs text-[#A0A0A0]">
+                <span>{formatCurrency(currentAmount)}</span>
+                <span>{formatCurrency(targetAmount)}</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-[#222222]">
+                <div
+                  className="h-2 rounded-full bg-[#FFD600]"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-7">
+              <p className="text-sm font-bold text-white">Payment Instructions</p>
+              <ol className="mt-4 space-y-3">
+                {[
+                  "Copy the virtual account number above.",
+                  "Open your bank app, USSD, or transfer channel.",
+                  "Send the expected amount to Nombank MFB.",
+                  "Keep your receipt while the split updates automatically.",
+                ].map((instruction, index) => (
+                  <li key={instruction} className="flex gap-3 text-sm leading-6 text-[#A0A0A0]">
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#FFD600] text-xs font-black text-[#0A0A0A]">
+                      {index + 1}
+                    </span>
+                    <span>{instruction}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
