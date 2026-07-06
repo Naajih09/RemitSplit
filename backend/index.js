@@ -497,16 +497,20 @@ app.post("/withdraw", requireAuth, async (req, res) => {
   try {
     const { walletName, amount, accountNumber, accountName, bankCode } = req.body;
 
-    let wallet;
-    try {
-      wallet = await getAccessibleWalletByName(walletName, req.userId);
-    } catch (fetchError) {
+    const { data: wallet, error: fetchError } = await supabaseAdmin
+      .from("wallets")
+      .select("*")
+      .eq("name", walletName)
+      .eq("user_id", req.userId)
+      .single();
+
+    if (fetchError) {
+      if (fetchError.code === "PGRST116") {
+        return res.status(404).json({ success: false, error: "Wallet not found or withdrawal access denied" });
+      }
+
       console.error("Supabase fetch wallet for withdrawal error:", fetchError);
       return res.status(500).json({ success: false, error: fetchError.message });
-    }
-
-    if (!wallet) {
-      return res.status(404).json({ success: false, error: "Wallet not found" });
     }
 
     const parsedAmount = Number(amount);

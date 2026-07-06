@@ -20,7 +20,8 @@ RemitSplit has three layers:
 
 - Nomba keys are server-side environment variables only.
 - User routes require Supabase JWT authentication through the `Authorization: Bearer <token>` header.
-- Wallet balance, contributors, transactions, quote, and withdrawal routes check wallet ownership or contributor access.
+- Wallet balance, contributors, transactions, and quote routes check wallet ownership or contributor access.
+- Withdrawal routes are restricted to the wallet owner in this MVP.
 - Webhook signatures are validated when `NOMBA_WEBHOOK_SECRET` is configured.
 - Webhook transaction IDs are de-duplicated in process to reduce accidental double-crediting during demos.
 - Withdrawals validate amount server-side against the current wallet balance before transfer.

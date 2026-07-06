@@ -16,6 +16,13 @@ export async function apiRequest(endpoint, options = {}) {
 
   const data = await response.json();
 
+  if (response.status === 401 || data.error === "Invalid or expired token") {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("user_email");
+    window.location.href = "/";
+    return;
+  }
+
   if (!response.ok) {
     throw new Error(data.error || "Something went wrong");
   }
@@ -24,10 +31,17 @@ export async function apiRequest(endpoint, options = {}) {
 }
 
 export async function signup(email, password) {
-  return apiRequest("/auth/signup", {
+  const data = await apiRequest("/auth/signup", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
+  if (data.session?.access_token) {
+    localStorage.setItem("access_token", data.session.access_token);
+  }
+  if (data.user?.email || email) {
+    localStorage.setItem("user_email", data.user?.email || email);
+  }
+  return data;
 }
 
 export async function login(email, password) {
@@ -35,8 +49,11 @@ export async function login(email, password) {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
-  if (data.session?.access_token) {
+  if (data?.session?.access_token) {
     localStorage.setItem("access_token", data.session.access_token);
+  }
+  if (data?.user?.email || email) {
+    localStorage.setItem("user_email", data?.user?.email || email);
   }
   return data;
 }
