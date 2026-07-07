@@ -422,6 +422,25 @@ app.post("/auth/login", authRateLimit, async (req, res) => {
   }
 });
 
+app.post("/auth/refresh", authRateLimit, async (req, res) => {
+  try {
+    const { refresh_token } = req.body;
+    if (!isNonEmptyString(refresh_token)) {
+      return validationError(res, "Refresh token is required");
+    }
+
+    const { data, error } = await supabase.auth.refreshSession({ refresh_token });
+
+    if (error || !data.session) {
+      return res.status(401).json({ success: false, error: error?.message || "Invalid or expired token" });
+    }
+
+    res.json({ success: true, user: data.user, session: data.session });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.post("/wallets", requireAuth, async (req, res) => {
   try {
     const { name, type, target_amount, contributors_count, beneficiary_bank_details, organizer_bank_details, deadline } = req.body;
