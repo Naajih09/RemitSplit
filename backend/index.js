@@ -3,13 +3,69 @@ require("dotenv").config();
 const cors = require("cors");
 const crypto = require("crypto");
 const express = require("express");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+
+const REQUIRED_ENV_VARS = [
+  "NOMBA_CLIENT_ID",
+  "NOMBA_PRIVATE_KEY",
+  "NOMBA_ACCOUNT_ID",
+  "SUPABASE_URL",
+  "SUPABASE_ANON_KEY",
+  "NOMBA_SUPABASE_SERVICE_KEY",
+];
+
+const missingVars = REQUIRED_ENV_VARS.filter((variable) => !process.env[variable]);
+if (missingVars.length > 0) {
+  console.error("Missing required environment variables:", missingVars.join(", "));
+  process.exit(1);
+}
+
 const app = express();
-app.use(cors());
+app.set("trust proxy", 1);
 
 const { createVirtualAccount, getAccessToken, fetchVirtualAccount, fetchBankCodes, lookupBankAccount, transferToBank, fetchExchangeRate, convertMoney } = require("./nomba");
 const { supabase, supabaseAdmin } = require("./supabase");
 
 const processedWebhookTransactions = new Set();
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:5173,http://localhost:5174")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const generalRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({ success: false, error: "Too many requests, please try again later" });
+  },
+});
+
+const authRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({ success: false, error: "Too many requests, please try again later" });
+  },
+});
+
+app.use(helmet());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}));
+app.use(generalRateLimit);
 
 function parseJsonField(value) {
   if (!value || typeof value !== "string") return value;
@@ -28,6 +84,43 @@ function normalizeBankDetails(details = {}) {
     bankCode: parsed.bankCode || parsed.bank_code || "",
     bankName: parsed.bankName || parsed.bank_name || "",
   };
+}
+
+function validationError(res, error) {
+  return res.status(400).json({ success: false, error });
+}
+
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isValidEmail(value) {
+  return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function isPositiveNumber(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0;
+}
+
+function isTenDigitAccountNumber(value) {
+  return typeof value === "string" && /^\d{10}$/.test(value.trim());
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateEmailPassword(res, email, password) {
+  if (!isValidEmail(email)) {
+    return validationError(res, "A valid email address is required");
+  }
+
+  if (typeof password !== "string" || password.length < 8) {
+    return validationError(res, "Password must be at least 8 characters");
+  }
+
+  return null;
 }
 
 async function userCanAccessWallet(walletId, userId) {
@@ -109,7 +202,7 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-app.use(express.json());
+app.use(express.json({ limit: "10kb" }));
 
 app.get("/", (req, res) => {
   res.send("RemitSplit backend is live");
@@ -121,6 +214,18 @@ app.post("/webhooks/nomba", async (req, res) => {
     const timestamp = req.headers["nomba-timestamp"];
     const webhookSecret = process.env.NOMBA_WEBHOOK_SECRET;
     const payload = req.body;
+
+    // For production-grade HMAC validation, prefer express.raw({ type: "application/json" })
+    // so the signature is computed against the exact raw request body.
+    const timestampMs = timestamp ? Date.parse(timestamp) : NaN;
+    const timestampAgeSeconds = Number.isNaN(timestampMs)
+      ? Infinity
+      : Math.abs(Date.now() - timestampMs) / 1000;
+
+    if (!timestamp || timestampAgeSeconds > 300) {
+      console.warn("Webhook timestamp too old or missing");
+      return res.status(200).json({ received: true, ignored: true });
+    }
 
     if (!webhookSecret) {
       console.warn("NOMBA_WEBHOOK_SECRET not configured - skipping signature verification");
@@ -275,9 +380,12 @@ app.get("/test-auth", async (req, res) => {
   }
 });
 
-app.post("/auth/signup", async (req, res) => {
+app.post("/auth/signup", authRateLimit, async (req, res) => {
   try {
     const { email, password } = req.body;
+    const validation = validateEmailPassword(res, email, password);
+    if (validation) return validation;
+
     const { data, error } = await supabase.auth.signUp({ email, password });
 
     if (error) {
@@ -290,9 +398,12 @@ app.post("/auth/signup", async (req, res) => {
   }
 });
 
-app.post("/auth/login", async (req, res) => {
+app.post("/auth/login", authRateLimit, async (req, res) => {
   try {
     const { email, password } = req.body;
+    const validation = validateEmailPassword(res, email, password);
+    if (validation) return validation;
+
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
@@ -308,6 +419,26 @@ app.post("/auth/login", async (req, res) => {
 app.post("/wallets", requireAuth, async (req, res) => {
   try {
     const { name, type, target_amount, contributors_count, beneficiary_bank_details, organizer_bank_details, deadline } = req.body;
+    if (!isNonEmptyString(name)) {
+      return validationError(res, "Wallet name is required");
+    }
+
+    if (name.trim().length > 100) {
+      return validationError(res, "Wallet name must be 100 characters or fewer");
+    }
+
+    if (type !== "wallet" && type !== "split") {
+      return validationError(res, "Wallet type must be either wallet or split");
+    }
+
+    if (target_amount !== null && target_amount !== undefined && !isPositiveNumber(target_amount)) {
+      return validationError(res, "Target amount must be a positive number");
+    }
+
+    if (beneficiary_bank_details !== null && beneficiary_bank_details !== undefined && !isPlainObject(beneficiary_bank_details)) {
+      return validationError(res, "Beneficiary bank details must be an object");
+    }
+
     const walletType = type === "split" ? "split" : "remit";
     const contributorsCount = Number(contributors_count || 1);
 
@@ -476,6 +607,18 @@ app.get("/exchange-rate", async (req, res) => {
 app.post("/convert", async (req, res) => {
   try {
     const { amount, currency, destinationCurrency } = req.body;
+    if (!isPositiveNumber(amount)) {
+      return validationError(res, "Amount must be a positive number");
+    }
+
+    if (!isNonEmptyString(currency)) {
+      return validationError(res, "Currency is required");
+    }
+
+    if (!isNonEmptyString(destinationCurrency)) {
+      return validationError(res, "Destination currency is required");
+    }
+
     const conversion = await convertMoney({ amount, currency, destinationCurrency });
     res.json({ success: true, conversion });
   } catch (error) {
@@ -486,6 +629,14 @@ app.post("/convert", async (req, res) => {
 app.post("/verify-account", async (req, res) => {
   try {
     const { accountNumber, bankCode } = req.body;
+    if (!isTenDigitAccountNumber(accountNumber)) {
+      return validationError(res, "Account number must be exactly 10 digits");
+    }
+
+    if (!isNonEmptyString(bankCode)) {
+      return validationError(res, "Bank code is required");
+    }
+
     const account = await lookupBankAccount({ accountNumber, bankCode });
     res.json({ success: true, account });
   } catch (error) {
@@ -496,6 +647,21 @@ app.post("/verify-account", async (req, res) => {
 app.post("/withdraw", requireAuth, async (req, res) => {
   try {
     const { walletName, amount, accountNumber, accountName, bankCode } = req.body;
+    if (!isNonEmptyString(walletName)) {
+      return validationError(res, "Wallet name is required");
+    }
+
+    if (!isPositiveNumber(amount)) {
+      return validationError(res, "Amount must be a positive number");
+    }
+
+    if (!isTenDigitAccountNumber(accountNumber)) {
+      return validationError(res, "Account number must be exactly 10 digits");
+    }
+
+    if (!isNonEmptyString(bankCode)) {
+      return validationError(res, "Bank code is required");
+    }
 
     const { data: wallet, error: fetchError } = await supabaseAdmin
       .from("wallets")
@@ -573,6 +739,19 @@ app.post("/withdraw", requireAuth, async (req, res) => {
 app.post("/contribute/quote", requireAuth, async (req, res) => {
   try {
     const { walletName, amount, currency } = req.body;
+    const allowedCurrencies = ["GBP", "EUR", "CAD", "USD"];
+
+    if (!isNonEmptyString(walletName)) {
+      return validationError(res, "Wallet name is required");
+    }
+
+    if (!isPositiveNumber(amount)) {
+      return validationError(res, "Amount must be a positive number");
+    }
+
+    if (!allowedCurrencies.includes(currency)) {
+      return validationError(res, "Currency must be one of GBP, EUR, CAD, USD");
+    }
 
     let wallet;
     try {
@@ -607,6 +786,9 @@ app.post("/wallets/:walletId/contributors", requireAuth, async (req, res) => {
   try {
     const { contributorUserId } = req.body;
     const walletId = req.params.walletId;
+    if (!isNonEmptyString(contributorUserId)) {
+      return validationError(res, "Contributor user ID is required");
+    }
 
     const { data: wallet, error: ownerError } = await supabaseAdmin
       .from("wallets")
@@ -815,6 +997,15 @@ app.get("/public/split/:accountRef", async (req, res) => {
     console.error("Fetch split payment details error:", error);
     res.status(500).json({ success: false, error: error.response?.data || error.message });
   }
+});
+
+app.use((req, res) => {
+  res.status(404).json({ success: false, error: "Route not found" });
+});
+
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({ success: false, error: "Internal server error" });
 });
 
 const PORT = process.env.PORT || 3000;

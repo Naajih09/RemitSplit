@@ -8,6 +8,69 @@ function LoadingSpinner() {
   );
 }
 
+function RefreshIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M20 6v5h-5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M4 18v-5h5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6.1 9A7 7 0 0 1 18 6.3L20 8"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M17.9 15A7 7 0 0 1 6 17.7L4 16"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M10 17l5-5-5-5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M15 12H3"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M15 4h3a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-3"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function formatCurrency(value) {
   const amount = Number(value ?? 0);
   if (Number.isNaN(amount)) return "₦0.00";
@@ -389,14 +452,14 @@ function Dashboard() {
                 aria-label="Sync wallets"
                 className="grid h-10 w-10 place-items-center rounded-full border border-[#333333] text-sm font-black text-[#FFD600] transition hover:border-[#FFD600]"
               >
-                {walletsLoading ? <LoadingSpinner /> : "R"}
+                {walletsLoading ? <LoadingSpinner /> : <RefreshIcon />}
               </button>
               <button
                 onClick={handleLogout}
                 aria-label="Log out"
                 className="grid h-10 w-10 place-items-center rounded-full border border-[#333333] text-xs font-black text-[#A0A0A0] transition hover:border-white hover:text-white"
               >
-                OUT
+                <LogoutIcon />
               </button>
             </div>
           </div>

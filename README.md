@@ -39,6 +39,13 @@ Backend `.env`:
 - `NOMBA_PRIVATE_KEY`
 - `NOMBA_ACCOUNT_ID`
 - `NOMBA_WEBHOOK_SECRET`
+- `ALLOWED_ORIGINS`
+
+For Render, set:
+
+```env
+ALLOWED_ORIGINS=https://remit-split.vercel.app,http://localhost:5173
+```
 
 Frontend `.env`:
 
