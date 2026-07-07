@@ -151,7 +151,7 @@ function Dashboard() {
     : 0;
   const shareableLink =
     wallet?.type === "split" && wallet?.account_ref
-      ? `${window.location.origin}/pay/${wallet.account_ref}`
+      ? `${window.location.origin}/#/pay/${wallet.account_ref}`
       : "";
   const mobileSectionClass = (tab) => (mobileTab === tab ? "" : "hidden xl:block");
 

@@ -969,21 +969,6 @@ app.get("/wallets/:walletId/transactions", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/test-create-split", async (req, res) => {
-  try {
-    const account = await createVirtualAccount({
-      accountRef: `split-${Date.now()}`,
-      accountName: "Test Eid Contribution",
-      expectedAmount: "5000.00",
-      expiryDate: "2026-08-01 23:59:00"
-    });
-
-    res.json({ success: true, account });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.response?.data || error.message });
-  }
-});
-
 app.get("/public/split/:accountRef", async (req, res) => {
   try {
     const accountRef = req.params.accountRef;
