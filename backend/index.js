@@ -377,15 +377,6 @@ app.post("/webhooks/nomba", async (req, res) => {
   res.status(200).json({ received: true });
 });
 
-app.get("/test-auth", async (req, res) => {
-  try {
-    const token = await getAccessToken();
-    res.json({ success: true, token });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 app.post("/auth/signup", authRateLimit, async (req, res) => {
   try {
     const { email, password } = req.body;

@@ -10,6 +10,17 @@ function clearAccessToken() {
   tokenExpiry = null;
 }
 
+function getNombaErrorDetail(error) {
+  const detail =
+    error.response?.data?.description ||
+    error.response?.data?.message ||
+    error.response?.data?.error ||
+    error.response?.data ||
+    error.message;
+
+  return typeof detail === "string" ? detail : JSON.stringify(detail);
+}
+
 async function getAccessToken() {
   if (cachedToken && tokenExpiry && Date.now() < tokenExpiry) {
     return cachedToken;
@@ -36,7 +47,7 @@ async function getAccessToken() {
 
     return cachedToken;
   } catch (error) {
-    const detail = error.response?.data?.description || error.response?.data || error.message;
+    const detail = getNombaErrorDetail(error);
     console.error("Nomba auth error:", detail);
     clearAccessToken();
     throw new Error(`Nomba auth failed: ${detail}`);
@@ -44,15 +55,20 @@ async function getAccessToken() {
 }
 
 async function nombaRequest(action) {
-  try {
-    return await action();
-  } catch (error) {
-    const status = error.response?.status;
-    if (status === 401) {
-      clearAccessToken();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
       return await action();
+    } catch (error) {
+      const status = error.response?.status;
+      if (status === 401 && attempt === 0) {
+        clearAccessToken();
+        continue;
+      }
+
+      const detail = getNombaErrorDetail(error);
+      clearAccessToken();
+      throw new Error(`Nomba request failed: ${detail}`);
     }
-    throw error;
   }
 }
 
