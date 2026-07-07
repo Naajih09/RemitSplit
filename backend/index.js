@@ -386,6 +386,19 @@ app.post("/auth/signup", authRateLimit, async (req, res) => {
       return validationError(res, "Full name is required");
     }
 
+    app.post("/auth/refresh", async (req, res) => {
+  try {
+    const { refresh_token } = req.body;
+    const { data, error } = await supabase.auth.refreshSession({ refresh_token });
+
+    if (error) return res.status(401).json({ success: false, error: error.message });
+
+    res.json({ success: true, session: data.session, user: data.user });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
