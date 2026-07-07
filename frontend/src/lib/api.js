@@ -68,7 +68,11 @@ export async function apiRequest(endpoint, options = {}, hasRetried = false) {
   }
 
   if (!response.ok) {
-    throw new Error(data.error || "Something went wrong");
+    const errorMessage =
+      typeof data.error === "string"
+        ? data.error
+        : data.error?.message || JSON.stringify(data.error) || "Something went wrong";
+    throw new Error(errorMessage);
   }
 
   return data;
