@@ -4,14 +4,19 @@ function clearSession() {
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
   localStorage.removeItem("user_email");
+  localStorage.removeItem("user_name");
 }
 
-function storeSession(data, fallbackEmail) {
+function storeSession(data, fallbackEmail, fallbackName) {
   if (data?.session?.access_token) {
     localStorage.setItem("access_token", data.session.access_token);
   }
   if (data?.session?.refresh_token) {
     localStorage.setItem("refresh_token", data.session.refresh_token);
+  }
+  const displayName = data?.user?.user_metadata?.full_name || data?.user?.user_metadata?.name || fallbackName;
+  if (displayName) {
+    localStorage.setItem("user_name", displayName);
   }
   if (data?.user?.email || fallbackEmail) {
     localStorage.setItem("user_email", data?.user?.email || fallbackEmail);
@@ -78,12 +83,12 @@ export async function apiRequest(endpoint, options = {}, hasRetried = false) {
   return data;
 }
 
-export async function signup(email, password) {
+export async function signup(email, password, fullName) {
   const data = await apiRequest("/auth/signup", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, fullName }),
   });
-  storeSession(data, email);
+  storeSession(data, email, fullName);
   return data;
 }
 

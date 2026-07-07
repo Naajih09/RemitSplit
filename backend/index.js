@@ -379,11 +379,22 @@ app.post("/webhooks/nomba", async (req, res) => {
 
 app.post("/auth/signup", authRateLimit, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, fullName } = req.body;
     const validation = validateEmailPassword(res, email, password);
     if (validation) return validation;
+    if (!isNonEmptyString(fullName)) {
+      return validationError(res, "Full name is required");
+    }
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName.trim(),
+        },
+      },
+    });
 
     if (error) {
       return res.status(400).json({ success: false, error: error.message });

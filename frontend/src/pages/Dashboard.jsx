@@ -125,8 +125,7 @@ function Dashboard() {
   const [error, setError] = useState("");
   const [mobileTab, setMobileTab] = useState("home");
 
-  const userEmail = localStorage.getItem("user_email") || "there";
-  const userName = userEmail.includes("@") ? userEmail.split("@")[0] : userEmail;
+  const userName = localStorage.getItem("user_name") || "there";
 
   const inputClass =
     "w-full rounded-2xl border border-[#222222] bg-[#1A1A1A] px-4 py-3.5 text-white outline-none transition placeholder:text-[#444444] focus:border-[#FFD600] focus:ring-0";
@@ -192,6 +191,7 @@ function Dashboard() {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user_email");
+    localStorage.removeItem("user_name");
     navigate("/", { replace: true });
   };
 

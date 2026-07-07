@@ -30,7 +30,7 @@ function Auth() {
       if (mode === "login") {
         await login(email, password);
       } else {
-        await signup(email, password);
+        await signup(email, password, fullName);
       }
       navigate("/dashboard");
     } catch (err) {
