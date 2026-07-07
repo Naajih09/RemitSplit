@@ -205,7 +205,13 @@ async function requireAuth(req, res, next) {
 app.use(express.json({ limit: "10kb" }));
 
 app.get("/", (req, res) => {
-  res.send("RemitSplit backend is live");
+  res.json({
+    name: "RemitSplit API",
+    version: "1.0.0",
+    status: "online",
+    documentation: "https://github.com/naajih09/RemitSplit", 
+    message: "Welcome to the RemitSplit backend! 🚀"
+  });
 });
 
 app.post("/webhooks/nomba", async (req, res) => {
