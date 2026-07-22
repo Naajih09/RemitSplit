@@ -81,6 +81,10 @@ function formatCurrency(value) {
   }).format(amount);
 }
 
+function isValidBankCode(value) {
+  return /^(\d{3}|\d{6})$/.test(value.trim());
+}
+
 const statusStyles = {
   active: "bg-[#00C896]/15 text-[#00C896]",
   completed: "bg-[#FFD600]/15 text-[#FFD600]",
@@ -236,6 +240,8 @@ function Dashboard() {
           throw new Error("Contributors count must be at least 1");
         if (!organizerAccountName.trim() || !organizerAccountNumber.trim() || !organizerBankCode.trim())
           throw new Error("Organizer payout account name, account number, and bank code are required");
+        if (!isValidBankCode(organizerBankCode))
+          throw new Error("Organizer bank code must be exactly 3 or 6 digits");
       }
 
       if (mode === "remit") {
@@ -388,6 +394,8 @@ function Dashboard() {
         throw new Error("Withdrawal amount is required");
       if (!withdrawAccountName.trim() || !withdrawAccountNumber.trim() || !withdrawBankCode.trim())
         throw new Error("Withdrawal account name, account number, and bank code are required");
+      if (!isValidBankCode(withdrawBankCode))
+        throw new Error("Withdrawal bank code must be exactly 3 or 6 digits");
 
       const data = await apiRequest("/withdraw", {
         method: "POST",
@@ -674,10 +682,12 @@ function Dashboard() {
                         />
                         <input
                           type="text"
+                          inputMode="numeric"
+                          maxLength={6}
                           value={organizerBankCode}
-                          onChange={(e) => setOrganizerBankCode(e.target.value)}
+                          onChange={(e) => setOrganizerBankCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                           className={inputClass}
-                          placeholder="Bank code"
+                          placeholder="e.g. 044"
                         />
                       </div>
                     </div>
@@ -967,8 +977,10 @@ function Dashboard() {
                           <label className={labelClass}>Bank Code</label>
                           <input
                             type="text"
+                            inputMode="numeric"
+                            maxLength={6}
                             value={withdrawBankCode}
-                            onChange={(e) => setWithdrawBankCode(e.target.value)}
+                            onChange={(e) => setWithdrawBankCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                             className={inputClass}
                             placeholder="e.g. 044"
                           />

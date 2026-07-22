@@ -12,14 +12,23 @@ create table if not exists public.wallets (
   type text not null check (type in ('remit', 'split')),
   target_amount numeric(14, 2), -- Required for Split mode
   current_balance numeric(14, 2) not null default 0,
-  beneficiary_bank_details jsonb, -- Encrypted or structured bank data
+  virtual_account_number text,
+  virtual_account_payload jsonb,
+  beneficiary_bank_details jsonb, -- For remit mode: beneficiary info; for split mode: organizer payout info
   status text not null default 'active' check (status in ('active', 'completed', 'archived')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+-- Add columns if they don't exist (idempotent migration)
+alter table public.wallets add column if not exists virtual_account_number text;
+alter table public.wallets add column if not exists virtual_account_payload jsonb;
+alter table public.wallets add column if not exists created_at timestamptz not null default now();
+alter table public.wallets add column if not exists updated_at timestamptz not null default now();
+
 -- Index for fast webhook lookups
 create index if not exists wallets_account_ref_idx on public.wallets(account_ref);
+create index if not exists wallets_virtual_account_number_idx on public.wallets(virtual_account_number);
 create unique index if not exists wallets_user_name_type_uidx on public.wallets(user_id, name, type);
 
 -- 2. CONTRIBUTORS TABLE

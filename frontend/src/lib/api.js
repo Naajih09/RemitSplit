@@ -68,7 +68,7 @@ export async function apiRequest(endpoint, options = {}, hasRetried = false) {
     }
 
     clearSession();
-    window.location.href = "/";
+    window.location.hash = "#/";
     return;
   }
 

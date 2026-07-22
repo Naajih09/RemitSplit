@@ -29,9 +29,9 @@ const payload = {
       userId: userId
     },
     transaction: {
-      aliasAccountNumber: "9900012345",
-      aliasAccountReference: "wallet-1782797492217",
-      transactionAmount: 250,
+      aliasAccountNumber: "9074260871",
+      aliasAccountReference: "split-1783457948981",
+      transactionAmount: 100,
       transactionId: transactionId,
       type: transactionType,
       time: time,
